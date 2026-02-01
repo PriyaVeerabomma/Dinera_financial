@@ -1,8 +1,8 @@
 /**
  * SpendingChart Component
  * 
- * Monochrome pie chart following design system.
- * No rainbow colors, 3D effects, or excessive tooltips.
+ * Pastel-colored pie chart for spending visualization.
+ * Clean, minimal design with soft colors for easy readability.
  */
 
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
@@ -12,15 +12,20 @@ interface SpendingChartProps {
   summary: SpendingSummary;
 }
 
-// Monochrome color palette from design system (warm grays/beiges)
-const MONOCHROME_COLORS = [
-  '#1C1C1C', // accent (darkest)
-  '#5F5B57', // textSecondary
-  '#8C877F', // muted
-  '#B5B0A8', // lighter
-  '#D4D0C8', // even lighter
-  '#E6E2DC', // border
-  '#F0EDE8', // lightest
+// Pastel color palette for category visualization
+const PASTEL_COLORS = [
+  '#A8D8EA', // Soft blue
+  '#FFB5B5', // Soft coral/pink
+  '#B5EAD7', // Soft mint green
+  '#FFEAA7', // Soft yellow
+  '#DDA0DD', // Soft plum
+  '#F7DC6F', // Soft gold
+  '#AED6F1', // Soft sky blue
+  '#F5B7B1', // Soft salmon
+  '#D5DBDB', // Soft gray
+  '#ABEBC6', // Soft lime
+  '#FAD7A0', // Soft peach
+  '#D2B4DE', // Soft lavender
 ];
 
 export function SpendingChart({ summary }: SpendingChartProps) {
@@ -85,9 +90,11 @@ export function SpendingChart({ summary }: SpendingChartProps) {
               animationBegin={0}
             >
               {chartData.map((_, index) => (
-                <Cell 
-                  key={`cell-${index}`} 
-                  fill={MONOCHROME_COLORS[index % MONOCHROME_COLORS.length]}
+                <Cell
+                  key={`cell-${index}`}
+                  fill={PASTEL_COLORS[index % PASTEL_COLORS.length]}
+                  stroke="#FFFFFF"
+                  strokeWidth={2}
                 />
               ))}
             </Pie>
@@ -101,9 +108,9 @@ export function SpendingChart({ summary }: SpendingChartProps) {
         {chartData.slice(0, 5).map((item, index) => (
           <div key={item.name} className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div 
-                className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
-                style={{ backgroundColor: MONOCHROME_COLORS[index % MONOCHROME_COLORS.length] }}
+              <div
+                className="w-2.5 h-2.5 rounded-full flex-shrink-0 border border-white/50"
+                style={{ backgroundColor: PASTEL_COLORS[index % PASTEL_COLORS.length] }}
               />
               <span className="text-xs text-textPrimary truncate">
                 {item.icon} {item.name}

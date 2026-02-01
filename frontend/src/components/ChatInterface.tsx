@@ -81,7 +81,7 @@ export function ChatInterface({ sessionId, suggestedPrompts, onPromptsUsed }: Ch
       }
 
       const data = await response.json();
-      
+
       // Update message with response
       setMessages(prev => prev.map(msg =>
         msg.id === assistantId
@@ -119,13 +119,13 @@ export function ChatInterface({ sessionId, suggestedPrompts, onPromptsUsed }: Ch
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-surface rounded-2xl shadow-sm border border-border/60 overflow-hidden">
-      {/* Header - fixed at top */}
-      <div className="flex-shrink-0 px-5 py-4 border-b border-border/60 bg-surface">
+      {/* Header - fixed at top with subtle pastel gradient */}
+      <div className="flex-shrink-0 px-5 py-4 border-b border-border/60 bg-gradient-to-r from-[#E8F4F8] to-[#F5E6F3]">
         <div className="flex items-center space-x-2">
-          <Sparkles className="w-5 h-5 text-accent" />
-          <h2 className="text-base font-semibold text-textPrimary">Let's make some sense of your money</h2>
+          <Sparkles className="w-5 h-5 text-[#7C3AED]" />
+          <h2 className="text-base font-semibold text-textPrimary">Chat with Dinera</h2>
         </div>
-        <p className="text-xs text-muted mt-0.5">Ask me anything about your spending</p>
+        <p className="text-xs text-muted mt-0.5">Your AI financial assistant</p>
       </div>
 
       {/* Messages - scrollable area with fixed height */}
@@ -137,8 +137,8 @@ export function ChatInterface({ sessionId, suggestedPrompts, onPromptsUsed }: Ch
           >
             <div
               className={`max-w-[85%] rounded-2xl px-4 py-2.5 ${message.role === 'user'
-                  ? 'bg-accent text-white'
-                  : 'bg-bg text-textPrimary'
+                ? 'bg-[#A8D8EA] text-[#1a365d]'
+                : 'bg-[#F5E6F3] text-textPrimary'
                 }`}
             >
               <div className="text-sm whitespace-pre-wrap leading-relaxed">
@@ -162,9 +162,9 @@ export function ChatInterface({ sessionId, suggestedPrompts, onPromptsUsed }: Ch
                 <button
                   key={index}
                   onClick={() => handlePromptClick(prompt)}
-                  className="text-xs px-3 py-1.5 bg-bg rounded-full 
-                           text-textSecondary hover:text-textPrimary
-                           transition-colors"
+                  className="text-xs px-3 py-1.5 rounded-full transition-all
+                           bg-[#E8F4F8] text-[#1a365d] hover:bg-[#A8D8EA]
+                           border border-[#A8D8EA]/50"
                 >
                   {prompt}
                 </button>
@@ -195,8 +195,8 @@ export function ChatInterface({ sessionId, suggestedPrompts, onPromptsUsed }: Ch
             type="submit"
             disabled={!input.trim() || isLoading}
             className={`p-2.5 rounded-xl transition-all ${input.trim() && !isLoading
-                ? 'bg-accent text-white hover:opacity-90'
-                : 'bg-bg text-muted cursor-not-allowed'
+              ? 'bg-[#A8D8EA] text-[#1a365d] hover:bg-[#8BC4D9]'
+              : 'bg-bg text-muted cursor-not-allowed'
               }`}
           >
             {isLoading ? (

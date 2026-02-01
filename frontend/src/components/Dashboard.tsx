@@ -19,14 +19,17 @@ interface DashboardProps {
   sessions?: { id: string; name: string | null; is_sample: boolean }[];
   activeSessionId?: string | null;
   onSwitchSession?: (sessionId: string) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  user?: any;
 }
 
-export function Dashboard({ 
-  data, 
+export function Dashboard({
+  data,
   onReset,
   sessions = [],
   activeSessionId,
-  onSwitchSession
+  onSwitchSession,
+  user
 }: DashboardProps) {
   const { summary, insights, anomalies, recurring_charges } = data;
   const [suggestedPrompts, setSuggestedPrompts] = useState<string[]>([]);
@@ -76,16 +79,18 @@ export function Dashboard({
             >
               <ArrowLeft className="w-4 h-4" />
             </button>
-            <h1 className="text-lg sm:text-xl font-semibold text-textPrimary">
-              Smart Financial Coach
-            </h1>
+            <div className="flex flex-col">
+              {/* <h1 className="text-xl sm:text-2xl font-medium tracking-wide text-textPrimary">
+                DINERA
+              </h1> */}
+              {user?.username && (
+
+                <h1 className="text-lg sm:text-xl font-semibold text-textPrimary">
+                  <h1 className="text-xl sm:text-2xl font-medium tracking-wide text-textPrimary">{user.username}'s DINERA </h1>
+                </h1>
+              )}
+            </div>
           </div>
-          <button
-            onClick={onReset}
-            className="hidden sm:block px-3 py-1.5 rounded-lg text-sm font-medium text-muted hover:text-textPrimary hover:bg-bg transition-colors"
-          >
-            New Upload
-          </button>
         </div>
       </header>
 
@@ -93,15 +98,15 @@ export function Dashboard({
       <main className="flex-1 min-h-0 overflow-hidden">
         <div className="h-full max-w-7xl mx-auto px-4 sm:px-6 py-4">
           <div className="h-full grid grid-cols-1 lg:grid-cols-5 gap-4 lg:gap-6">
-            
+
             {/* Left Column: Financial Data (3/5 on desktop) */}
             <div className="lg:col-span-3 min-h-0 overflow-y-auto space-y-4 pb-4 lg:pr-2">
-              
+
               {/* Top Insight Hero - Most Actionable Insight */}
               {insights.length > 0 && (
                 <TopInsightHero insight={insights.find(i => i.priority === 1) || insights[0]} />
               )}
-              
+
               {/* Quick Stats Row */}
               <div className="grid grid-cols-3 gap-3">
                 <QuickStatCard
@@ -125,29 +130,29 @@ export function Dashboard({
 
               {/* Tab Navigation */}
               <div className="flex gap-1 border-b border-border/60 overflow-x-auto">
-                <TabButton 
-                  active={activeTab === 'overview'} 
+                <TabButton
+                  active={activeTab === 'overview'}
                   onClick={() => setActiveTab('overview')}
                 >
                   Overview
                 </TabButton>
-                <TabButton 
-                  active={activeTab === 'anomalies'} 
+                <TabButton
+                  active={activeTab === 'anomalies'}
                   onClick={() => setActiveTab('anomalies')}
                   badge={highAnomalyCount > 0 ? highAnomalyCount : undefined}
                   alert
                 >
                   Anomalies
                 </TabButton>
-                <TabButton 
-                  active={activeTab === 'recurring'} 
+                <TabButton
+                  active={activeTab === 'recurring'}
                   onClick={() => setActiveTab('recurring')}
                   badge={grayChargeCount > 0 ? grayChargeCount : undefined}
                 >
                   Recurring
                 </TabButton>
-                <TabButton 
-                  active={activeTab === 'insights'} 
+                <TabButton
+                  active={activeTab === 'insights'}
                   onClick={() => setActiveTab('insights')}
                 >
                   Insights
@@ -159,7 +164,7 @@ export function Dashboard({
                 {activeTab === 'overview' && (
                   <div className="space-y-4">
                     <SpendingChart summary={summary} />
-                    
+
                     {/* Priority Alert: Anomalies */}
                     {anomalies.length > 0 && (
                       <PriorityAlert
@@ -168,7 +173,7 @@ export function Dashboard({
                         onClick={() => setActiveTab('anomalies')}
                       />
                     )}
-                    
+
                     {/* Priority Alert: Gray Charges */}
                     {grayCharges.length > 0 && (
                       <PriorityAlert
@@ -185,7 +190,7 @@ export function Dashboard({
                 )}
 
                 {activeTab === 'recurring' && (
-                  <RecurringChargesTable 
+                  <RecurringChargesTable
                     charges={recurring_charges}
                     grayChargesTotal={grayChargesTotal}
                   />
@@ -199,7 +204,7 @@ export function Dashboard({
 
             {/* Right Column: Chat Interface (2/5 on desktop, fixed height) */}
             <div className="lg:col-span-2 min-h-[400px] lg:min-h-0 h-[400px] lg:h-full">
-              <ChatInterface 
+              <ChatInterface
                 sessionId={data.session_id}
                 suggestedPrompts={suggestedPrompts}
               />
@@ -225,9 +230,9 @@ interface TopInsightHeroProps {
 
 function TopInsightHero({ insight }: TopInsightHeroProps) {
   const [dismissed, setDismissed] = useState(false);
-  
+
   if (dismissed) return null;
-  
+
   const getEmoji = (type: string) => {
     switch (type) {
       case 'savings': return '💡';
@@ -251,7 +256,7 @@ function TopInsightHero({ insight }: TopInsightHeroProps) {
       >
         ✕
       </button>
-      
+
       <div className="flex items-start gap-3">
         <div className="text-2xl flex-shrink-0">{getEmoji(insight.type)}</div>
         <div className="flex-1 min-w-0">
@@ -263,7 +268,7 @@ function TopInsightHero({ insight }: TopInsightHeroProps) {
           </div>
           <h3 className="text-sm font-semibold text-textPrimary mb-1">{insight.title}</h3>
           <p className="text-xs text-textSecondary leading-relaxed mb-2">{insight.description}</p>
-          
+
           {savingsAmount && (
             <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-bg rounded-lg">
               <span className="text-xs font-medium text-textPrimary">
@@ -326,18 +331,16 @@ function TabButton({ active, onClick, children, badge, alert }: TabButtonProps) 
   return (
     <button
       onClick={onClick}
-      className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-        active
+      className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${active
           ? 'border-accent text-textPrimary'
           : 'border-transparent text-muted hover:text-textSecondary'
-      }`}
+        }`}
     >
       <span className="flex items-center gap-1.5">
         <span>{children}</span>
         {badge !== undefined && (
-          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-            alert ? 'bg-accent/90 text-white' : 'bg-bg text-muted'
-          }`}>
+          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${alert ? 'bg-accent/90 text-white' : 'bg-bg text-muted'
+            }`}>
             {badge}
           </span>
         )}
@@ -494,7 +497,7 @@ function RecurringChargesTable({ charges, grayChargesTotal }: RecurringChargesTa
           <p className="text-xs text-muted mt-1">Small recurring charges you might have forgotten about</p>
         </div>
       )}
-      
+
       <div className="bg-surface rounded-xl overflow-hidden shadow-sm border border-border/40">
         <table className="w-full">
           <thead>
@@ -570,13 +573,14 @@ function AnomaliesList({ anomalies }: AnomaliesListProps) {
                 {formatDate(anomaly.transaction_date)} · {anomaly.category_name}
               </p>
             </div>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${
-              anomaly.severity === 'high' 
-                ? 'bg-accent/90 text-white' 
-                : 'bg-bg text-muted'
-            }`}>
-              {anomaly.severity === 'high' ? 'HIGH' : 
-               anomaly.severity === 'medium' ? 'MED' : 'LOW'}
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${anomaly.severity === 'high'
+                ? 'bg-[#FFB5B5] text-[#8B0000]'
+                : anomaly.severity === 'medium'
+                  ? 'bg-[#FFEAA7] text-[#856404]'
+                  : 'bg-[#B5EAD7] text-[#155724]'
+              }`}>
+              {anomaly.severity === 'high' ? 'HIGH' :
+                anomaly.severity === 'medium' ? 'MED' : 'LOW'}
             </span>
           </div>
           <div className="text-sm">
