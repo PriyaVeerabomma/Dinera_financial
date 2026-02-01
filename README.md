@@ -1,267 +1,255 @@
-# 💰 Smart Financial Coach
+# Smart Financial Coach
 
-> AI-powered financial analysis that helps you understand your spending, detect anomalies, and achieve your savings goals.
+An AI-powered financial analysis application that helps users understand their spending patterns, detect anomalies, identify recurring charges, and receive personalized insights.
 
-![Smart Financial Coach](https://img.shields.io/badge/AI-Powered-1C1C1C?style=flat-square)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.109-1C1C1C?style=flat-square)
-![React](https://img.shields.io/badge/React-18.2-1C1C1C?style=flat-square)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.3-1C1C1C?style=flat-square)
+![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green.svg)
+![React](https://img.shields.io/badge/React-18+-blue.svg)
+![TypeScript](https://img.shields.io/badge/TypeScript-5+-blue.svg)
+![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
----
+## Features
 
-## ✨ Features
+- **CSV Upload & Processing** - Upload bank transaction CSV files for analysis
+- **AI-Powered Categorization** - Automatic transaction categorization using OpenAI GPT-4
+- **Anomaly Detection** - Statistical detection of unusual spending patterns
+- **Recurring Charge Detection** - Identify subscriptions and "gray charges" (forgotten small subscriptions)
+- **Personalized Insights** - AI-generated actionable financial recommendations
+- **Interactive Chat (Dinera)** - Conversational AI assistant for financial questions
+- **Goal-Based Savings** - Get recommendations to achieve savings targets
+- **Clerk Authentication** - Secure user authentication with session isolation
 
-### 🏷️ Smart Categorization
-- **Hybrid approach**: Rule-based patterns (~70% coverage) + GPT-4o for complex transactions
-- **Confidence scores**: See how confident the AI is about each categorization
-- **Source tracking**: Know if categorization came from rules, AI, or user input
+## Tech Stack
 
-### 🚨 Anomaly Detection
-- **Statistical analysis**: Z-score based detection for unusual spending
-- **Severity levels**: High, Medium, Low based on deviation from typical spending
-- **Rich explanations**: Understand why each transaction was flagged
+### Backend
+- **FastAPI** - Modern Python web framework
+- **SQLAlchemy** - SQL database ORM
+- **SQLite** - Lightweight database
+- **OpenAI GPT-4** - AI-powered insights and chat
+- **Pydantic** - Data validation
 
-### 🔄 Recurring Charge Detection
-- **Subscription tracking**: Automatically identifies monthly and weekly patterns
-- **Gray charge alerts**: Flags small, unknown recurring charges you might have forgotten
-- **Frequency analysis**: Shows how often each charge occurs
+### Frontend
+- **React 18** - UI library
+- **TypeScript** - Type-safe JavaScript
+- **Vite** - Fast build tool
+- **Tailwind CSS** - Utility-first styling
+- **Clerk** - Authentication
 
-### 💡 AI-Powered Insights
-- **Personalized advice**: GPT-4o generates actionable recommendations
-- **Explainable AI**: Every insight includes reasoning for transparency
-- **Priority ordering**: Most impactful insights shown first
+## Prerequisites
 
-### 🎯 Goal Forecasting (Stretch)
-- **Savings targets**: Set a monthly savings goal
-- **Smart suggestions**: AI recommends specific category cuts
-- **Achievability check**: Honest assessment of goal feasibility
+Before you begin, ensure you have the following installed:
 
----
+- **Python 3.10+** - [Download Python](https://www.python.org/downloads/)
+- **Node.js 18+** - [Download Node.js](https://nodejs.org/)
+- **npm** or **yarn** - Comes with Node.js
 
-## 🏗️ Architecture
+You'll also need API keys for:
+- **OpenAI API** - [Get API Key](https://platform.openai.com/api-keys)
+- **Clerk** (optional, for authentication) - [Get Started](https://clerk.com/)
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                   Frontend (React + TypeScript)             │
-│  Upload CSV → Dashboard → Insights → Goals                  │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    FastAPI Backend                          │
-│  /upload  →  /analyze  →  /dashboard  →  /goal              │
-│                                                             │
-│  ┌─────────────┐ ┌─────────────┐ ┌──────────────────────┐   │
-│  │CSVProcessor │ │ Categorizer │ │  AnomalyDetector     │   │
-│  └─────────────┘ └─────────────┘ └──────────────────────┘   │
-│  ┌─────────────┐ ┌─────────────┐ ┌──────────────────────┐   │
-│  │RecurringDet │ │InsightGen   │ │  GoalForecaster      │   │
-│  └─────────────┘ └─────────────┘ └──────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
-                              │
-              ┌───────────────┼───────────────┐
-              ▼               ▼               ▼
-        ┌──────────┐   ┌───────────┐   ┌──────────┐
-        │  SQLite  │   │  OpenAI   │   │  Pandas  │
-        │ 8 tables │   │  GPT-4o   │   │ Analysis │
-        └──────────┘   └───────────┘   └──────────┘
-```
+## Installation
 
----
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Python 3.10+
-- Node.js 18+
-- OpenAI API key
-
-### 1. Clone & Setup Backend
+### 1. Clone the Repository
 
 ```bash
-# Navigate to project
+git clone https://github.com/yourusername/smart-financial-coach.git
 cd smart-financial-coach
+```
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+### 2. Backend Setup
+
+```bash
+# Navigate to backend directory
+cd backend
+
+# Create a virtual environment (recommended)
+python3 -m venv venv
+
+# Activate virtual environment
+# On macOS/Linux:
+source venv/bin/activate
+# On Windows:
+.\venv\Scripts\activate
 
 # Install dependencies
-cd backend
 pip install -r requirements.txt
-
-# Configure environment
-cp ../.env.example ../.env
-# Edit .env and add your OPENAI_API_KEY
 ```
 
-### 2. Start Backend
+### 3. Frontend Setup
 
+```bash
+# Navigate to frontend directory (from project root)
+cd frontend
+
+# Install dependencies
+npm install
+```
+
+## Configuration
+
+### Backend Environment Variables
+
+```bash
+# Copy the example file
+cd backend
+cp env.example .env
+
+# Edit with your values
+nano .env  # or use your preferred editor
+```
+
+Required variables:
+```env
+OPENAI_API_KEY=sk-your-openai-api-key-here
+```
+
+Optional (for Clerk authentication):
+```env
+CLERK_SECRET_KEY=sk_test_your-clerk-secret-key
+CLERK_FRONTEND_API=your-instance.clerk.accounts.dev
+```
+
+For development without authentication:
+```env
+AUTH_BYPASS=true
+```
+
+### Frontend Environment Variables
+
+```bash
+# Copy the example file
+cd frontend
+cp env.example .env
+```
+
+Optional (for Clerk authentication):
+```env
+VITE_CLERK_PUBLISHABLE_KEY=pk_test_your-clerk-publishable-key
+```
+
+> **Note:** If you don't configure Clerk, the app will run in development mode with authentication bypassed.
+
+## Running the Application
+
+### Option 1: Run Both Services (Recommended)
+
+Open two terminal windows:
+
+**Terminal 1 - Backend:**
 ```bash
 cd backend
-python main.py
-# Or: uvicorn main:app --reload --host 0.0.0.0 --port 8000
+source venv/bin/activate  # If using virtual environment
+python3 -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-Backend will be available at: http://localhost:8000
-
-### 3. Setup & Start Frontend
-
+**Terminal 2 - Frontend:**
 ```bash
-# In a new terminal
 cd frontend
-npm install
 npm run dev
 ```
 
-Frontend will be available at: http://localhost:5173
+### Option 2: Quick Start Script
 
----
+```bash
+# From project root, run both services
+# Terminal 1
+cd backend && python3 -m uvicorn main:app --reload &
 
-## 📊 API Endpoints
+# Terminal 2
+cd frontend && npm run dev
+```
+
+### Access the Application
+
+- **Frontend:** http://localhost:5173
+- **Backend API:** http://localhost:8000
+- **API Docs:** http://localhost:8000/docs
+
+## Usage
+
+1. **Open the app** at http://localhost:5173
+2. **Sign in** (or use bypass mode in development)
+3. **Upload a CSV** file with your transactions, or click **"Use Sample Data"** to try with demo data
+4. **View Dashboard** with insights, anomalies, and recurring charges
+5. **Chat with Dinera** - Ask questions about your spending
+
+### CSV Format
+
+Your CSV file should have these columns (flexible naming):
+
+| Column | Description | Example |
+|--------|-------------|---------|
+| date | Transaction date | 2024-01-15 |
+| description | Merchant/description | AMAZON.COM |
+| amount | Transaction amount | -49.99 |
+
+Negative amounts = expenses, Positive amounts = income
+
+## API Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/health` | Health check (API, DB, OpenAI status) |
-| `POST` | `/upload` | Upload CSV file for processing |
-| `POST` | `/sample` | Load synthetic sample data |
-| `POST` | `/analyze/{session_id}` | Run full analysis pipeline |
-| `GET` | `/dashboard/{session_id}` | Get consolidated dashboard data |
-| `POST` | `/goal/{session_id}` | AI-powered savings recommendations |
-| `GET` | `/transactions/{session_id}` | Get paginated transactions |
-| `GET` | `/categories` | Get all categories |
+| GET | `/health` | Health check |
+| POST | `/upload` | Upload CSV file |
+| POST | `/sample` | Load sample data |
+| POST | `/analyze/{session_id}` | Run analysis |
+| GET | `/dashboard/{session_id}` | Get dashboard data |
+| POST | `/chat/{session_id}/sync` | Chat with Dinera |
+| GET | `/sessions` | List user sessions |
 
-### Example: Full Flow
+Full API documentation available at http://localhost:8000/docs
 
-```bash
-# 1. Upload CSV
-curl -X POST http://localhost:8000/upload \
-  -F "file=@transactions.csv"
-# Returns: {"session_id": "abc-123", ...}
-
-# 2. Analyze
-curl -X POST http://localhost:8000/analyze/abc-123
-# Returns: {"status": "ready", "insights_generated": 5, ...}
-
-# 3. Get Dashboard
-curl http://localhost:8000/dashboard/abc-123
-# Returns: {summary, insights, anomalies, recurring_charges, deltas}
-```
-
----
-
-## 📁 Project Structure
+## Project Structure
 
 ```
 smart-financial-coach/
 ├── backend/
-│   ├── main.py                    # FastAPI app & routes
-│   ├── database.py                # SQLite + 8 tables
-│   ├── models.py                  # SQLAlchemy ORM models
-│   ├── schemas.py                 # Pydantic schemas
-│   ├── synthetic_data.py          # Demo data generator
-│   ├── requirements.txt           # Python dependencies
+│   ├── main.py              # FastAPI application
+│   ├── models.py            # SQLAlchemy models
+│   ├── schemas.py           # Pydantic schemas
+│   ├── auth.py              # Clerk authentication
+│   ├── database.py          # Database setup
+│   ├── requirements.txt     # Python dependencies
 │   └── services/
-│       ├── ai_service.py          # OpenAI wrapper
-│       ├── csv_processor.py       # CSV parsing
-│       ├── categorizer.py         # Hybrid categorization
-│       ├── anomaly_detector.py    # Z-score detection
-│       ├── recurring_detector.py  # Subscription detection
-│       └── insight_generator.py   # AI insights
+│       ├── ai_service.py    # OpenAI integration
+│       ├── chat_service.py  # Dinera chat service
+│       ├── categorizer.py   # Transaction categorization
+│       ├── anomaly_detector.py
+│       ├── recurring_detector.py
+│       └── insight_generator.py
 ├── frontend/
-│   ├── package.json               # Node dependencies
-│   ├── vite.config.ts             # Vite config
-│   ├── tailwind.config.js         # Design system colors
-│   └── src/
-│       ├── App.tsx                # Main app
-│       ├── types.ts               # TypeScript interfaces
-│       ├── api/client.ts          # API client
-│       └── components/
-│           ├── Upload.tsx         # File upload
-│           ├── Dashboard.tsx      # Main dashboard
-│           ├── InsightCard.tsx    # AI insights
-│           └── SpendingChart.tsx  # Pie chart
-├── .env.example                   # Environment template
-├── .cursor/rules/                 # Development rules
-│   ├── project-rules.mdc          # Coding standards
-│   └── design.mdc                 # UI design system
-└── README.md                      # This file
+│   ├── src/
+│   │   ├── App.tsx          # Main application
+│   │   ├── components/      # React components
+│   │   ├── api/client.ts    # API client
+│   │   └── types.ts         # TypeScript types
+│   ├── package.json
+│   └── vite.config.ts
+└── README.md
 ```
 
----
+## Troubleshooting
 
-## 🗄️ Database Schema
+### Backend won't start
+- Ensure Python 3.10+ is installed: `python3 --version`
+- Check if port 8000 is available: `lsof -i :8000`
+- Verify `.env` file exists with `OPENAI_API_KEY`
 
-| Table | Purpose |
-|-------|---------|
-| `sessions` | Upload session tracking |
-| `categories` | Transaction categories (12 defaults) |
-| `transactions` | Core transaction data |
-| `anomalies` | Detected unusual spending |
-| `recurring_charges` | Subscriptions & recurring payments |
-| `deltas` | Month-over-month changes |
-| `insights` | AI-generated recommendations |
-| `goals` | User savings goals |
+### Frontend won't start
+- Ensure Node.js 18+ is installed: `node --version`
+- Check if port 5173 is available: `lsof -i :5173`
+- Run `npm install` to ensure dependencies are installed
 
----
+### API calls failing
+- Check backend is running at http://localhost:8000/health
+- Verify CORS settings if using different ports
+- Check browser console for error details
 
-## 🎨 Design System
+### Authentication issues
+- For development, set `AUTH_BYPASS=true` in backend `.env`
+- For production, ensure all Clerk keys are configured
 
-The UI follows a **warm, editorial-style neutral palette**:
-
-| Token | Hex | Usage |
-|-------|-----|-------|
-| `bg` | `#F7F5F2` | App background |
-| `surface` | `#FFFFFF` | Cards, panels |
-| `border` | `#E6E2DC` | Dividers |
-| `textPrimary` | `#111111` | Main text |
-| `textSecondary` | `#5F5B57` | Metadata |
-| `muted` | `#8C877F` | Placeholders |
-| `accent` | `#1C1C1C` | Emphasis |
-
-**Philosophy**: Calm, premium, grounded — like a quiet, intelligent assistant.
-
----
-
-## 📋 CSV Format
-
-Your CSV file should have these columns:
-
-```csv
-date,description,amount
-2024-01-15,STARBUCKS COFFEE,-5.75
-2024-01-15,PAYCHECK DIRECT DEPOSIT,3200.00
-2024-01-16,NETFLIX SUBSCRIPTION,-15.99
-```
-
-- **date**: Transaction date (supports multiple formats)
-- **description**: Merchant/transaction description
-- **amount**: Positive for income, negative for expenses
-
----
-
-## 🧪 Demo Script (2-3 minutes)
-
-1. **Open app** — Clean landing page
-2. **Click "Use Sample Data"** — Instant upload
-3. **See dashboard** — Spending chart animates in
-4. **Scroll to Insights** — Point out confidence scores and "Why" explanations
-5. **Show Gray Charges** — "The app found a $2.99 charge you might not remember"
-6. **Emphasize** — "All insights are explainable — users know WHY the AI made each recommendation"
-
----
-
-## 🔒 Privacy & Security
-
-- **Local processing**: Transactions processed on your machine
-- **No storage**: Data not persisted after session
-- **Privacy-first AI**: Only aggregated data sent to OpenAI (no raw transactions)
-- **Session-based**: Each upload creates an isolated session
-
----
-
-## 🛠️ Development
+## Development
 
 ### Running Tests
 
@@ -270,37 +258,29 @@ cd backend
 pytest tests/ -v
 ```
 
-### Code Quality
+### Code Style
 
-```bash
-# Python
-pip install black isort
-black backend/
-isort backend/
+- Backend: Follow PEP 8, use type hints
+- Frontend: ESLint + Prettier configured
 
-# TypeScript
-cd frontend
-npm run lint
-```
+## Contributing
 
----
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/your-feature`
+3. Commit changes: `git commit -m 'Add your feature'`
+4. Push to branch: `git push origin feature/your-feature`
+5. Open a Pull Request
 
-## 📝 License
+## License
 
-MIT License — See [LICENSE](LICENSE) for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
----
+## Acknowledgments
 
-## 🙏 Acknowledgments
-
-- **OpenAI** for GPT-4o powering the AI features
-- **FastAPI** for the high-performance backend
-- **React + Tailwind** for the beautiful frontend
-- **Recharts** for the monochrome pie charts
+- OpenAI for GPT-4 API
+- Clerk for authentication
+- FastAPI and React communities
 
 ---
 
-<div align="center">
-  <p>Built with ❤️ for better financial health</p>
-  <p><em>"This UI should feel like a quiet, intelligent assistant — not a loud app asking for attention."</em></p>
-</div>
+Built with ❤️ for smarter financial decisions
