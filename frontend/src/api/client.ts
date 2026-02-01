@@ -22,7 +22,9 @@ import type {
 } from '../types';
 
 // Base URL for API requests
-const API_BASE = 'http://localhost:8000';
+// const API_BASE = 'http://localhost:8000';
+const API_BASE = import.meta.env.VITE_API_BASE_URL;
+
 
 // =============================================================================
 // Authentication
@@ -46,12 +48,12 @@ async function getAuthHeaders(): Promise<HeadersInit> {
   if (!getAuthToken) {
     return {};
   }
-  
+
   const token = await getAuthToken();
   if (!token) {
     return {};
   }
-  
+
   return {
     'Authorization': `Bearer ${token}`,
   };
@@ -76,14 +78,14 @@ async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const errorBody = await response.text();
     let details: string | undefined;
-    
+
     try {
       const parsed = JSON.parse(errorBody);
       details = parsed.detail || parsed.message;
     } catch {
       details = errorBody;
     }
-    
+
     // Special handling for 401
     if (response.status === 401) {
       throw new ApiError(
@@ -92,14 +94,14 @@ async function handleResponse<T>(response: Response): Promise<T> {
         details
       );
     }
-    
+
     throw new ApiError(
       `API Error: ${response.status}`,
       response.status,
       details
     );
   }
-  
+
   return response.json();
 }
 
@@ -165,7 +167,7 @@ export async function deleteSession(sessionId: string): Promise<void> {
     method: 'DELETE',
     headers: authHeaders,
   });
-  
+
   if (!response.ok) {
     throw new ApiError('Failed to delete session', response.status);
   }
@@ -182,13 +184,13 @@ export async function uploadCSV(file: File): Promise<UploadResponse> {
   const authHeaders = await getAuthHeaders();
   const formData = new FormData();
   formData.append('file', file);
-  
+
   const response = await fetch(`${API_BASE}/upload`, {
     method: 'POST',
     headers: authHeaders,
     body: formData,
   });
-  
+
   return handleResponse<UploadResponse>(response);
 }
 
@@ -201,7 +203,7 @@ export async function useSampleData(): Promise<UploadResponse> {
     method: 'POST',
     headers: authHeaders,
   });
-  
+
   return handleResponse<UploadResponse>(response);
 }
 
@@ -219,7 +221,7 @@ export async function analyzeSession(sessionId: string): Promise<AnalyzeResponse
     method: 'POST',
     headers: authHeaders,
   });
-  
+
   return handleResponse<AnalyzeResponse>(response);
 }
 
@@ -258,7 +260,7 @@ export async function getGoalRecommendations(
     },
     body: JSON.stringify({ target_amount: targetAmount }),
   });
-  
+
   return handleResponse<GoalResponse>(response);
 }
 
@@ -279,12 +281,12 @@ export async function getTransactions(
     limit: limit.toString(),
     offset: offset.toString(),
   });
-  
+
   const response = await fetch(
     `${API_BASE}/transactions/${sessionId}?${params}`,
     { headers: authHeaders }
   );
-  
+
   return handleResponse<Transaction[]>(response);
 }
 
@@ -315,11 +317,11 @@ export async function uploadAndAnalyze(
   // Step 1: Upload
   onProgress?.('Uploading file...');
   const uploadResult = await uploadCSV(file);
-  
+
   // Step 2: Analyze
   onProgress?.('Analyzing transactions...');
   await analyzeSession(uploadResult.session_id);
-  
+
   // Step 3: Get dashboard
   onProgress?.('Loading dashboard...');
   return getDashboard(uploadResult.session_id);
@@ -334,11 +336,11 @@ export async function loadSampleAndAnalyze(
   // Step 1: Load sample data
   onProgress?.('Loading sample data...');
   const uploadResult = await useSampleData();
-  
+
   // Step 2: Analyze
   onProgress?.('Analyzing transactions...');
   await analyzeSession(uploadResult.session_id);
-  
+
   // Step 3: Get dashboard
   onProgress?.('Loading dashboard...');
   return getDashboard(uploadResult.session_id);

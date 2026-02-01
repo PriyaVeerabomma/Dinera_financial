@@ -14,6 +14,9 @@ import { SpendingChart, SummaryStats } from './SpendingChart';
 import { ChatInterface } from './ChatInterface';
 import { FinancialFortuneCookie } from './FinancialFortuneCookie';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL;
+
+
 interface DashboardProps {
   data: DashboardResponse;
   onReset: () => void;
@@ -44,7 +47,7 @@ export function Dashboard({
   useEffect(() => {
     const fetchPrompts = async () => {
       try {
-        const response = await fetch(`http://localhost:8000/chat/${data.session_id}/prompts`);
+        const response = await fetch(`${API_BASE}/chat/${data.session_id}/prompts`);
         if (response.ok) {
           const result = await response.json();
           setSuggestedPrompts(result.prompts || []);
@@ -91,7 +94,7 @@ export function Dashboard({
                 </h1>
               )}
             </div>
-            
+
             {/* Fortune Cookie - beside the title */}
             <FinancialFortuneCookie sessionId={data.session_id} />
           </div>
