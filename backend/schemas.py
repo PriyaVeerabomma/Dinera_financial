@@ -223,3 +223,18 @@ class UserInfoResponse(BaseModel):
     sessions: list[SessionOut]
     has_sample_session: bool
     active_session_id: Optional[str] = None
+
+
+# =============================================================================
+# Fortune Cookie Schemas
+# =============================================================================
+
+class FortuneResponse(BaseModel):
+    """Response schema for fortune cookie generation."""
+    fortune: str = Field(..., description="The mystical fortune text")
+    sentiment: Literal["positive", "neutral", "warning"] = Field(
+        ..., description="Fortune sentiment (affects cookie color)"
+    )
+    lucky_number: Optional[str] = Field(
+        None, description="Lucky number as dollar amount (e.g., '$450')"
+    )

@@ -30,7 +30,8 @@ from services.observability import (
 from services import (
     AIService, CSVProcessor, Categorizer,
     AnomalyDetector, RecurringDetector, InsightGenerator,
-    ChatService, PatternAnalyzer, GoalForecaster
+    ChatService, PatternAnalyzer, GoalForecaster,
+    FortuneGenerator, build_financial_stats
 )
 from schemas import (
     UploadResponse, AnalyzeResponse, DashboardResponse,
@@ -39,7 +40,7 @@ from schemas import (
     InsightOut, DeltaOut, SpendingSummary, GoalCut, CategoryOut,
     ChatRequest, ChatResponse, SuggestedPromptsResponse,
     SessionOut, SessionListResponse, UserInfoResponse,
-    ConversationHistoryResponse, ChatMessage
+    ConversationHistoryResponse, ChatMessage, FortuneResponse
 )
 from models import (
     Session, Transaction, Category, Anomaly,
@@ -1589,6 +1590,100 @@ async def get_conversation_history(
         conversation_id=conversation_id,
         messages=messages,
         created_at=conversation.created_at
+    )
+
+
+# =============================================================================
+# Fortune Cookie Endpoint
+# =============================================================================
+
+@app.get(
+    "/fortune/{session_id}",
+    response_model=FortuneResponse,
+    tags=["Fortune"],
+    summary="Generate a mystical financial fortune",
+    description="Get a cryptic but actionable fortune cookie message based on your spending patterns."
+)
+async def generate_fortune(
+    session_id: str,
+    db: DBSession = Depends(get_db),
+    user_id: str = Depends(get_current_user)
+) -> FortuneResponse:
+    """
+    Generate a mystical financial fortune based on user's spending patterns.
+    
+    The fortune is:
+    - Cryptic yet actionable (fortune cookie style)
+    - References actual financial data
+    - Color-coded by sentiment (positive/neutral/warning)
+    - Optionally includes a "lucky number" as a savings amount
+    
+    Args:
+        session_id: The session ID from upload.
+        db: Database session.
+        user_id: Authenticated user ID.
+        
+    Returns:
+        FortuneResponse with fortune text, sentiment, and optional lucky number.
+    """
+    # Rate limiting (reuse chat limiter, but more generous)
+    if not api_rate_limiter.is_allowed(f"fortune:{session_id}"):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many fortune requests. Try again in a moment."
+        )
+    
+    # Verify session exists and belongs to user
+    session = verify_session_ownership(db, session_id, user_id)
+    
+    # Build category lookup
+    categories = {c.id: c for c in db.query(Category).all()}
+    
+    # Get transactions for summary
+    transactions = db.query(Transaction).filter(
+        Transaction.session_id == session_id
+    ).all()
+    
+    if not transactions:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No transactions found. Please analyze your data first."
+        )
+    
+    # Calculate summary
+    summary = _calculate_spending_summary(transactions, categories)
+    
+    # Get anomaly count
+    anomaly_count = db.query(Anomaly).filter(
+        Anomaly.session_id == session_id
+    ).count()
+    
+    # Get recurring charges
+    recurring = db.query(RecurringCharge).filter(
+        RecurringCharge.session_id == session_id
+    ).all()
+    
+    recurring_list = [
+        {"is_gray_charge": r.is_gray_charge}
+        for r in recurring
+    ]
+    
+    # Build financial stats for fortune generation
+    stats = build_financial_stats(
+        summary=summary.model_dump(),
+        anomaly_count=anomaly_count,
+        recurring_charges=recurring_list,
+        insights=[]
+    )
+    
+    # Generate fortune
+    generator = FortuneGenerator()
+    fortune = await generator.generate(stats)
+    
+    return FortuneResponse(
+        fortune=fortune.text,
+        sentiment=fortune.sentiment.value,
+        lucky_number=fortune.lucky_number
     )
 
 

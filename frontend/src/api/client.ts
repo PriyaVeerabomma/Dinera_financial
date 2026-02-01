@@ -18,6 +18,7 @@ import type {
   ConversationHistory,
   UserSession,
   SessionListResponse,
+  FortuneResponse,
 } from '../types';
 
 // Base URL for API requests
@@ -421,4 +422,20 @@ export async function getConversationHistory(
     { headers: authHeaders }
   );
   return handleResponse<ConversationHistory>(response);
+}
+
+// =============================================================================
+// Fortune Cookie Endpoint
+// =============================================================================
+
+/**
+ * Generate a mystical financial fortune based on spending patterns.
+ * Returns a cryptic but actionable fortune cookie message.
+ */
+export async function getFortune(sessionId: string): Promise<FortuneResponse> {
+  const authHeaders = await getAuthHeaders();
+  const response = await fetch(`${API_BASE}/fortune/${sessionId}`, {
+    headers: authHeaders,
+  });
+  return handleResponse<FortuneResponse>(response);
 }

@@ -12,6 +12,7 @@ import { ArrowLeft, AlertTriangle, RefreshCw, TrendingDown, TrendingUp } from 'l
 import type { DashboardResponse, RecurringCharge, Anomaly, Insight } from '../types';
 import { SpendingChart, SummaryStats } from './SpendingChart';
 import { ChatInterface } from './ChatInterface';
+import { FinancialFortuneCookie } from './FinancialFortuneCookie';
 
 interface DashboardProps {
   data: DashboardResponse;
@@ -80,9 +81,6 @@ export function Dashboard({
               <ArrowLeft className="w-4 h-4" />
             </button>
             <div className="flex flex-col">
-              {/* <h1 className="text-xl sm:text-2xl font-medium tracking-wide text-textPrimary">
-                DINERA
-              </h1> */}
               {user?.username ? (
                 <h1 className="text-xl sm:text-2xl font-medium tracking-wide text-textPrimary">
                   {user.username}'s DINERA
@@ -93,6 +91,9 @@ export function Dashboard({
                 </h1>
               )}
             </div>
+            
+            {/* Fortune Cookie - beside the title */}
+            <FinancialFortuneCookie sessionId={data.session_id} />
           </div>
         </div>
       </header>

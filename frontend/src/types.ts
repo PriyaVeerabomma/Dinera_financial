@@ -240,3 +240,15 @@ export interface UserSession {
   has_sample_session: boolean;
   active_session_id: string | null;
 }
+
+// =============================================================================
+// Fortune Cookie
+// =============================================================================
+
+export type FortuneSentiment = 'positive' | 'neutral' | 'warning';
+
+export interface FortuneResponse {
+  fortune: string;
+  sentiment: FortuneSentiment;
+  lucky_number: string | null;
+}

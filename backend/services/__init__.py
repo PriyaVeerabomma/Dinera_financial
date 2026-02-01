@@ -10,6 +10,7 @@ from .chat_service import ChatService
 from .pattern_analyzer import PatternAnalyzer
 from .privacy_layer import PrivacyLayer, get_privacy_layer
 from .goal_forecaster import GoalForecaster, forecast_savings
+from .fortune_generator import FortuneGenerator, build_financial_stats
 
 __all__ = [
     "AIService",
@@ -24,4 +25,6 @@ __all__ = [
     "get_privacy_layer",
     "GoalForecaster",
     "forecast_savings",
+    "FortuneGenerator",
+    "build_financial_stats",
 ]
