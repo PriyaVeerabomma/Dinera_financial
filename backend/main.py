@@ -22,8 +22,10 @@ Usage:
 """
 
 import os
+import time
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Optional, Dict
+from collections import defaultdict
 
 from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -31,6 +33,84 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session as DBSession
 
 from database import get_db, init_db, SessionLocal
+
+
+# =============================================================================
+# Rate Limiting
+# =============================================================================
+
+class RateLimiter:
+    """
+    Simple in-memory rate limiter to prevent API abuse.
+    
+    Limits requests per session to prevent:
+        - OpenAI budget drain from chat spam
+        - Denial of service attacks
+        - Runaway clients
+    
+    Uses sliding window algorithm with configurable limits.
+    """
+    
+    def __init__(self, max_requests: int = 30, window_seconds: int = 60):
+        """
+        Initialize rate limiter.
+        
+        Args:
+            max_requests: Maximum requests allowed per window.
+            window_seconds: Time window in seconds.
+        """
+        self.max_requests = max_requests
+        self.window_seconds = window_seconds
+        self.requests: Dict[str, list] = defaultdict(list)
+    
+    def is_allowed(self, identifier: str) -> bool:
+        """
+        Check if request is allowed for given identifier.
+        
+        Args:
+            identifier: Session ID or IP address.
+            
+        Returns:
+            True if request is allowed, False if rate limited.
+        """
+        now = time.time()
+        window_start = now - self.window_seconds
+        
+        # Clean old requests
+        self.requests[identifier] = [
+            t for t in self.requests[identifier] 
+            if t > window_start
+        ]
+        
+        # Check limit
+        if len(self.requests[identifier]) >= self.max_requests:
+            return False
+        
+        # Record request
+        self.requests[identifier].append(now)
+        return True
+    
+    def get_remaining(self, identifier: str) -> int:
+        """Get remaining requests for identifier."""
+        now = time.time()
+        window_start = now - self.window_seconds
+        current_requests = [
+            t for t in self.requests.get(identifier, [])
+            if t > window_start
+        ]
+        return max(0, self.max_requests - len(current_requests))
+    
+    def get_reset_time(self, identifier: str) -> float:
+        """Get seconds until rate limit resets."""
+        if identifier not in self.requests or not self.requests[identifier]:
+            return 0
+        oldest = min(self.requests[identifier])
+        return max(0, oldest + self.window_seconds - time.time())
+
+
+# Global rate limiter instances
+chat_rate_limiter = RateLimiter(max_requests=30, window_seconds=60)  # 30 chat requests per minute
+api_rate_limiter = RateLimiter(max_requests=100, window_seconds=60)  # 100 API requests per minute
 from models import (
     Session, Transaction, Category, Anomaly,
     RecurringCharge, Delta, Insight, Goal,
@@ -48,6 +128,11 @@ from services import (
     AIService, CSVProcessor, Categorizer,
     AnomalyDetector, RecurringDetector, InsightGenerator,
     ChatService, PatternAnalyzer, GoalForecaster
+)
+from services.observability import (
+    logger, metrics, timed, timed_block,
+    log_analysis_start, log_analysis_complete,
+    log_chat_request
 )
 
 
@@ -180,6 +265,31 @@ async def health_check(
         database=db_status,
         openai=openai_status
     )
+
+
+@app.get(
+    "/metrics",
+    tags=["System"],
+    summary="Get application metrics",
+    description="Returns metrics including request counts, timing data, and session statistics."
+)
+async def get_metrics():
+    """
+    Get application metrics for monitoring and debugging.
+    
+    Returns:
+        Dict with counters, timings, and session metrics.
+    
+    Example:
+        GET /metrics
+        Response: {
+            "uptime_seconds": 3600,
+            "counters": {"analysis.completed": 15, "chat.requests": 42},
+            "timings": {"anomaly_detection": {"avg_ms": 120.5, ...}}
+        }
+    """
+    return metrics.get_summary()
+
 
 
 # =============================================================================
@@ -355,17 +465,26 @@ async def analyze_session(
         )
     
     try:
+        # Get transaction count for logging
+        txn_count = db.query(Transaction).filter(Transaction.session_id == session_id).count()
+        log_analysis_start(session_id, txn_count)
+        
         # Step 1: Categorize transactions
-        categorizer = Categorizer(db, ai_service)
-        categorized_count = await categorizer.categorize_all(session_id)
+        with timed_block("categorization"):
+            categorizer = Categorizer(db, ai_service)
+            categorized_count = await categorizer.categorize_all(session_id)
+            metrics.gauge("last_categorized_count", categorized_count)
         
         # Step 2: Detect anomalies
-        anomaly_detector = AnomalyDetector(db)
-        anomalies_count = anomaly_detector.detect(session_id)
+        with timed_block("anomaly_detection"):
+            anomaly_detector = AnomalyDetector(db)
+            anomalies_count = anomaly_detector.detect(session_id)
+            metrics.gauge("last_anomalies_count", anomalies_count)
         
         # Step 3: Detect recurring charges
-        recurring_detector = RecurringDetector(db)
-        recurring_count = recurring_detector.detect(session_id)
+        with timed_block("recurring_detection"):
+            recurring_detector = RecurringDetector(db)
+            recurring_count = recurring_detector.detect(session_id)
         
         # Step 4: Calculate deltas (month-over-month changes)
         insight_gen = InsightGenerator(db, ai_service)
@@ -389,6 +508,15 @@ async def analyze_session(
         session.status = "ready"
         db.commit()
         
+        # Log completion
+        results = {
+            "transactions": categorized_count,
+            "anomalies": anomalies_count,
+            "recurring": recurring_count,
+            "insights": insights_count + pattern_insights_count
+        }
+        log_analysis_complete(session_id, results)
+        
         return AnalyzeResponse(
             session_id=session_id,
             status="ready",
@@ -399,6 +527,10 @@ async def analyze_session(
         )
     
     except Exception as e:
+        # Log error
+        logger.error("Analysis failed", error=str(e), session_id=session_id[:8])
+        metrics.increment("analysis.failed")
+        
         # Update session status to error
         session.status = "error"
         db.commit()
@@ -1010,6 +1142,8 @@ async def chat(
     - Recurring charges and subscriptions
     - Personalized recommendations
     
+    Rate limited to 30 requests per minute per session to prevent abuse.
+    
     Args:
         session_id: The session ID from upload.
         request: ChatRequest with message and optional conversation_id.
@@ -1018,6 +1152,23 @@ async def chat(
     Returns:
         StreamingResponse with the AI's reply.
     """
+    # Rate limiting check
+    if not chat_rate_limiter.is_allowed(session_id):
+        remaining = chat_rate_limiter.get_remaining(session_id)
+        reset_time = chat_rate_limiter.get_reset_time(session_id)
+        metrics.increment("chat.rate_limited")
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Rate limit exceeded. Try again in {reset_time:.0f} seconds.",
+            headers={
+                "X-RateLimit-Remaining": str(remaining),
+                "X-RateLimit-Reset": str(int(reset_time)),
+            }
+        )
+    
+    # Log chat request
+    log_chat_request(session_id, len(request.message))
+    
     # Verify session exists
     session = db.query(Session).filter(Session.id == session_id).first()
     if not session:
@@ -1061,14 +1212,32 @@ async def chat_sync(
     Same as /chat but returns the complete response at once
     instead of streaming. Useful for clients that don't support streaming.
     
+    Rate limited to 30 requests per minute per session to prevent abuse.
+    
     Args:
         session_id: The session ID from upload.
         request: ChatRequest with message and optional conversation_id.
         db: Database session.
     
+    Raises:
+        HTTPException: 429 if rate limit exceeded.
+    
     Returns:
         ChatResponse with the complete message.
     """
+    # Rate limiting check
+    if not chat_rate_limiter.is_allowed(session_id):
+        remaining = chat_rate_limiter.get_remaining(session_id)
+        reset_time = chat_rate_limiter.get_reset_time(session_id)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Rate limit exceeded. Try again in {reset_time:.0f} seconds.",
+            headers={
+                "X-RateLimit-Remaining": str(remaining),
+                "X-RateLimit-Reset": str(int(reset_time)),
+            }
+        )
+    
     # Verify session exists
     session = db.query(Session).filter(Session.id == session_id).first()
     if not session:

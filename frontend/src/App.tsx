@@ -3,6 +3,8 @@
  * 
  * Main application component handling view routing:
  * Upload → Analyzing → Dashboard
+ * 
+ * Wrapped in ErrorBoundary for graceful error handling.
  */
 
 import { useState, useCallback } from 'react';
@@ -10,9 +12,10 @@ import { Loader2 } from 'lucide-react';
 import type { DashboardResponse, AppView } from './types';
 import { Upload } from './components/Upload';
 import { Dashboard } from './components/Dashboard';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { uploadAndAnalyze, loadSampleAndAnalyze } from './api/client';
 
-function App() {
+function AppContent() {
   // Application state
   const [view, setView] = useState<AppView>('upload');
   const [dashboardData, setDashboardData] = useState<DashboardResponse | null>(null);
@@ -175,6 +178,24 @@ function StepItem({ label, isActive }: { label: string; isActive: boolean }) {
         {label}
       </span>
     </div>
+  );
+}
+
+// =============================================================================
+// Main App with Error Boundary
+// =============================================================================
+
+function App() {
+  return (
+    <ErrorBoundary
+      onError={(error, errorInfo) => {
+        // Log to console (could also send to error tracking service)
+        console.error('[App] Caught error:', error.message);
+        console.error('[App] Component stack:', errorInfo.componentStack);
+      }}
+    >
+      <AppContent />
+    </ErrorBoundary>
   );
 }
 

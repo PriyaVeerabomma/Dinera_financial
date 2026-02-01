@@ -1,15 +1,79 @@
-"""Subscription and recurring charge detection."""
+"""
+Subscription and recurring charge detection using rule-based pattern matching.
+
+This module uses deterministic rules rather than ML because:
+1. Subscriptions follow predictable patterns (same amount, regular intervals)
+2. Rules are transparent, fast, and don't require training data
+3. ML would just learn the same rules with extra complexity
+
+Detection Strategies:
+    - Interval analysis (monthly ~30 days, weekly ~7 days)
+    - Amount consistency (low variance = subscription)
+    - Known merchant patterns (Netflix, Spotify, etc.)
+    - Gray charge detection (small, forgotten subscriptions)
+
+Author: Smart Financial Coach Team
+"""
 
 import re
 from collections import defaultdict
 from datetime import date
+from typing import Optional
 from sqlalchemy.orm import Session as DBSession
 
 from models import Transaction, RecurringCharge, Category
 
 
 class RecurringDetector:
-    """Identify subscriptions and recurring charges."""
+    """
+    Identify subscriptions and recurring charges using rule-based detection.
+    
+    Why rules over ML:
+        - Subscriptions are deterministic: same merchant, same amount, regular intervals
+        - Rules are transparent and explainable
+        - No training data needed
+        - Works on first upload (no cold start problem)
+    """
+    
+    # Known subscription keywords (case-insensitive matching)
+    SUBSCRIPTION_KEYWORDS = {
+        # Streaming
+        'netflix', 'spotify', 'hulu', 'disney', 'hbo', 'amazon prime',
+        'apple music', 'youtube premium', 'peacock', 'paramount',
+        'audible', 'kindle unlimited', 'crunchyroll',
+        
+        # Software/Cloud
+        'adobe', 'microsoft 365', 'office 365', 'dropbox', 'icloud',
+        'google storage', 'github', 'slack', 'zoom', 'notion',
+        
+        # Fitness
+        'gym', 'fitness', 'peloton', 'planet fitness', 'orangetheory',
+        
+        # News/Media
+        'nytimes', 'wsj', 'washington post', 'economist', 'medium',
+        
+        # Services
+        'linkedin premium', 'grammarly', 'lastpass', '1password',
+        'nordvpn', 'expressvpn', 'headspace', 'calm',
+    }
+    
+    # Patterns that indicate subscriptions (regex)
+    SUBSCRIPTION_PATTERNS = [
+        r'subscription',
+        r'recurring',
+        r'monthly',
+        r'membership',
+        r'premium',
+        r'plus\s*$',  # ends with "plus"
+    ]
+    
+    # Patterns that are NOT subscriptions (utilities, rent, etc.)
+    NON_SUBSCRIPTION_PATTERNS = [
+        r'electric', r'power company', r'utility',
+        r'water', r'sewer', r'gas company',
+        r'rent', r'landlord', r'lease',
+        r'insurance', r'paycheck', r'salary',
+    ]
 
     def __init__(self, db: DBSession):
         self.db = db
@@ -75,6 +139,14 @@ class RecurringDetector:
                 # Calculate confidence based on regularity
                 confidence = 1.0 - min(interval_variance / 20, 0.5)
 
+                # Determine if this is a known subscription type
+                is_subscription = self._is_known_subscription(pattern)
+                is_utility = self._is_utility_or_bill(pattern)
+                
+                # Boost confidence for known subscription patterns
+                if is_subscription:
+                    confidence = min(confidence + 0.1, 1.0)
+                
                 recurring = RecurringCharge(
                     session_id=session_id,
                     description_pattern=pattern,
@@ -92,6 +164,52 @@ class RecurringDetector:
 
         self.db.commit()
         return recurring_count
+    
+    def _is_known_subscription(self, description: str) -> bool:
+        """
+        Check if description matches known subscription patterns.
+        
+        Uses keyword matching and regex patterns - transparent and fast.
+        
+        Args:
+            description: Transaction description (already normalized).
+            
+        Returns:
+            True if matches subscription pattern.
+        """
+        desc_lower = description.lower()
+        
+        # Check known subscription keywords
+        for keyword in self.SUBSCRIPTION_KEYWORDS:
+            if keyword in desc_lower:
+                return True
+        
+        # Check regex patterns
+        for pattern in self.SUBSCRIPTION_PATTERNS:
+            if re.search(pattern, desc_lower, re.IGNORECASE):
+                return True
+        
+        return False
+    
+    def _is_utility_or_bill(self, description: str) -> bool:
+        """
+        Check if description matches utility/bill patterns (not subscriptions).
+        
+        These are recurring but not discretionary subscriptions.
+        
+        Args:
+            description: Transaction description.
+            
+        Returns:
+            True if matches utility/bill pattern.
+        """
+        desc_lower = description.lower()
+        
+        for pattern in self.NON_SUBSCRIPTION_PATTERNS:
+            if re.search(pattern, desc_lower, re.IGNORECASE):
+                return True
+        
+        return False
 
     def _group_similar_transactions(
         self, transactions: list[Transaction]

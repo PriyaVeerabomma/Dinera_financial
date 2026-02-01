@@ -1,10 +1,21 @@
-"""CSV parsing, validation, and normalization."""
+"""
+CSV parsing, validation, and normalization with data sanity checks.
+
+Validates:
+    - Required columns exist
+    - Date format is parseable
+    - Amounts are reasonable (not $1M+)
+    - No future dates
+    - Income is positive, expenses are negative
+
+Author: Smart Financial Coach Team
+"""
 
 import uuid
 import re
-from datetime import datetime
+from datetime import datetime, date
 from io import StringIO
-from typing import Optional
+from typing import Optional, List, Dict
 import pandas as pd
 from fastapi import UploadFile
 from sqlalchemy.orm import Session as DBSession
@@ -12,17 +23,34 @@ from sqlalchemy.orm import Session as DBSession
 from models import Session, Transaction
 
 
+class DataValidationError(ValueError):
+    """Exception for data validation failures."""
+    
+    def __init__(self, message: str, warnings: List[str] = None):
+        super().__init__(message)
+        self.warnings = warnings or []
+
+
 class CSVProcessor:
-    """Parse, validate, and normalize transaction CSVs."""
+    """Parse, validate, and normalize transaction CSVs with sanity checks."""
 
     REQUIRED_COLUMNS = ["date", "description", "amount"]
     DATE_FORMATS = ["%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y", "%m-%d-%Y", "%Y/%m/%d"]
+    
+    # Data sanity limits
+    MAX_TRANSACTION_AMOUNT = 100000  # $100K - flag anything higher
+    MAX_SINGLE_EXPENSE = 50000       # $50K - unusual for personal finance
+    MIN_DATE_YEARS_AGO = 5           # Don't accept data older than 5 years
+    MAX_ROWS = 10000                 # Prevent huge uploads
 
     def __init__(self, db: DBSession):
         self.db = db
+        self.validation_warnings: List[str] = []
 
     async def process(self, file: UploadFile) -> tuple[str, int]:
         """Process uploaded CSV and create session with transactions."""
+        self.validation_warnings = []
+        
         # Read file content
         content = await file.read()
         try:
@@ -31,6 +59,15 @@ class CSVProcessor:
             text = content.decode("latin-1")
 
         df = pd.read_csv(StringIO(text))
+        
+        # Check row count
+        if len(df) > self.MAX_ROWS:
+            raise DataValidationError(
+                f"File too large: {len(df)} rows. Maximum allowed: {self.MAX_ROWS}"
+            )
+        
+        if len(df) == 0:
+            raise DataValidationError("File is empty or has no valid data rows")
 
         # Normalize column names
         df.columns = df.columns.str.lower().str.strip()
@@ -42,6 +79,9 @@ class CSVProcessor:
         df = self._normalize_dates(df)
         df = self._normalize_amounts(df)
         df = self._clean_descriptions(df)
+        
+        # Validate data sanity
+        df = self._validate_data_sanity(df)
 
         # Create session
         session_id = str(uuid.uuid4())
@@ -176,3 +216,106 @@ class CSVProcessor:
         df["raw_description"] = df["description"]
         df["description"] = df["description"].apply(clean_desc)
         return df
+    
+    def _validate_data_sanity(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Validate data sanity and flag/remove problematic rows.
+        
+        Checks:
+            - No future dates
+            - No extremely old dates (>5 years)
+            - No unreasonably large amounts ($100K+)
+            - No negative income descriptions
+            - No zero amounts (unless explicitly allowed)
+        
+        Args:
+            df: DataFrame with normalized data.
+            
+        Returns:
+            Cleaned DataFrame with problematic rows removed.
+            
+        Raises:
+            DataValidationError: If data has critical issues.
+        """
+        original_count = len(df)
+        today = date.today()
+        min_date = date(today.year - self.MIN_DATE_YEARS_AGO, 1, 1)
+        
+        # Track rows to remove
+        rows_to_remove = set()
+        
+        # Check 1: Future dates
+        future_dates = df[df['date'] > today]
+        if len(future_dates) > 0:
+            self.validation_warnings.append(
+                f"Removed {len(future_dates)} transactions with future dates"
+            )
+            rows_to_remove.update(future_dates.index)
+        
+        # Check 2: Very old dates
+        old_dates = df[df['date'] < min_date]
+        if len(old_dates) > 0:
+            self.validation_warnings.append(
+                f"Removed {len(old_dates)} transactions older than {self.MIN_DATE_YEARS_AGO} years"
+            )
+            rows_to_remove.update(old_dates.index)
+        
+        # Check 3: Unreasonably large amounts
+        large_amounts = df[df['amount'].abs() > self.MAX_TRANSACTION_AMOUNT]
+        if len(large_amounts) > 0:
+            self.validation_warnings.append(
+                f"Removed {len(large_amounts)} transactions over ${self.MAX_TRANSACTION_AMOUNT:,}"
+            )
+            rows_to_remove.update(large_amounts.index)
+        
+        # Check 4: Flag suspicious large expenses (don't remove, just warn)
+        large_expenses = df[
+            (df['amount'] < 0) & 
+            (df['amount'].abs() > self.MAX_SINGLE_EXPENSE) &
+            (~df.index.isin(rows_to_remove))
+        ]
+        if len(large_expenses) > 0:
+            self.validation_warnings.append(
+                f"Found {len(large_expenses)} unusually large expenses (>${self.MAX_SINGLE_EXPENSE:,})"
+            )
+        
+        # Check 5: Zero amounts
+        zero_amounts = df[df['amount'] == 0]
+        if len(zero_amounts) > 0:
+            self.validation_warnings.append(
+                f"Removed {len(zero_amounts)} transactions with zero amount"
+            )
+            rows_to_remove.update(zero_amounts.index)
+        
+        # Check 6: Income marked as negative (common data error)
+        income_keywords = ['paycheck', 'salary', 'deposit', 'refund', 'dividend']
+        for idx, row in df.iterrows():
+            if idx in rows_to_remove:
+                continue
+            desc_lower = str(row.get('description', '')).lower()
+            if any(keyword in desc_lower for keyword in income_keywords):
+                if row['amount'] < 0:
+                    # Fix: income should be positive
+                    df.at[idx, 'amount'] = abs(row['amount'])
+                    self.validation_warnings.append(
+                        f"Fixed negative income: {row['description'][:30]}"
+                    )
+        
+        # Remove flagged rows
+        if rows_to_remove:
+            df = df.drop(list(rows_to_remove))
+        
+        # Check if we have any data left
+        if len(df) == 0:
+            raise DataValidationError(
+                "No valid transactions after data validation. Check date and amount formats.",
+                warnings=self.validation_warnings
+            )
+        
+        removed_count = original_count - len(df)
+        if removed_count > 0:
+            print(f"⚠️ Data validation: removed {removed_count}/{original_count} rows")
+            for warning in self.validation_warnings:
+                print(f"   - {warning}")
+        
+        return df.reset_index(drop=True)

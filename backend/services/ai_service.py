@@ -1,21 +1,106 @@
-"""OpenAI wrapper with retry logic and error handling."""
+"""
+OpenAI wrapper with retry logic, rate limiting, and error handling.
+
+Features:
+    - Exponential backoff retry for transient failures
+    - Rate limit handling (429 errors)
+    - Token usage tracking
+    - Graceful fallback when API unavailable
+
+Author: Smart Financial Coach Team
+"""
 
 import os
 import json
+import asyncio
 from typing import Optional
+from functools import wraps
 from dotenv import load_dotenv
 
 load_dotenv()
 
 
+# =============================================================================
+# Retry Decorator with Exponential Backoff
+# =============================================================================
+
+def retry_with_backoff(
+    max_retries: int = 3,
+    initial_delay: float = 1.0,
+    max_delay: float = 60.0,
+    exponential_base: float = 2.0,
+    retryable_errors: tuple = None
+):
+    """
+    Decorator for async functions that implements retry with exponential backoff.
+    
+    Args:
+        max_retries: Maximum number of retry attempts.
+        initial_delay: Initial delay in seconds before first retry.
+        max_delay: Maximum delay between retries.
+        exponential_base: Base for exponential backoff calculation.
+        retryable_errors: Tuple of exception types to retry on.
+    """
+    if retryable_errors is None:
+        retryable_errors = (Exception,)
+    
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            last_exception = None
+            delay = initial_delay
+            
+            for attempt in range(max_retries + 1):
+                try:
+                    return await func(*args, **kwargs)
+                except retryable_errors as e:
+                    last_exception = e
+                    error_str = str(e).lower()
+                    
+                    # Check for rate limit errors (429)
+                    if "rate_limit" in error_str or "429" in error_str:
+                        # Use longer delay for rate limits
+                        delay = min(delay * 2, max_delay)
+                        print(f"⏳ Rate limited, waiting {delay:.1f}s (attempt {attempt + 1}/{max_retries + 1})")
+                    elif attempt < max_retries:
+                        print(f"⚠️ API error, retrying in {delay:.1f}s (attempt {attempt + 1}/{max_retries + 1}): {e}")
+                    
+                    if attempt < max_retries:
+                        await asyncio.sleep(delay)
+                        delay = min(delay * exponential_base, max_delay)
+                    else:
+                        raise last_exception
+            
+            raise last_exception
+        return wrapper
+    return decorator
+
+
 class AIService:
-    """Wrapper for OpenAI API with retry logic."""
+    """
+    Wrapper for OpenAI API with retry logic and rate limit handling.
+    
+    Features:
+        - Automatic retry with exponential backoff
+        - Rate limit (429) handling
+        - Token usage tracking
+        - Graceful fallback when API unavailable
+    """
+
+    # Rate limit settings
+    MAX_RETRIES = 3
+    INITIAL_DELAY = 1.0
+    MAX_DELAY = 60.0
 
     def __init__(self):
         raw_key = os.getenv("OPENAI_API_KEY", "")
-        self.api_key = raw_key.strip() if raw_key else None  # Strip whitespace!
+        self.api_key = raw_key.strip() if raw_key else None
         self.model = os.getenv("OPENAI_MODEL", "gpt-4o")
         self.client = None
+        
+        # Token usage tracking
+        self.total_tokens_used = 0
+        self.request_count = 0
         
         # Only initialize client if API key is available and valid
         if self.api_key and self.api_key.startswith("sk-"):
@@ -28,6 +113,23 @@ class AIService:
                 self.client = None
         else:
             print("⚠️ OpenAI API key not configured. AI features will use fallback mode.")
+    
+    def _track_usage(self, response) -> None:
+        """Track token usage from API response."""
+        if hasattr(response, 'usage') and response.usage:
+            self.total_tokens_used += response.usage.total_tokens
+            self.request_count += 1
+    
+    def get_usage_stats(self) -> dict:
+        """Get current usage statistics."""
+        return {
+            "total_tokens": self.total_tokens_used,
+            "request_count": self.request_count,
+            "avg_tokens_per_request": (
+                self.total_tokens_used / self.request_count 
+                if self.request_count > 0 else 0
+            )
+        }
 
     async def categorize_transactions(
         self, aggregated_patterns: list[dict], categories: list[str]
@@ -51,8 +153,7 @@ class AIService:
         )
 
         try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
+            response = await self._call_with_retry(
                 messages=[
                     {
                         "role": "system",
@@ -97,10 +198,7 @@ class AIService:
                         },
                     }
                 ],
-                tool_choice={
-                    "type": "function",
-                    "function": {"name": "categorize_patterns"},
-                },
+                tool_choice={"type": "function", "function": {"name": "categorize_patterns"}},
                 timeout=30,
             )
 
@@ -109,8 +207,51 @@ class AIService:
             return result.get("categorizations", [])
 
         except Exception as e:
-            print(f"AI categorization error: {e}")
+            print(f"AI categorization error after retries: {e}")
             return []
+    
+    async def _call_with_retry(self, **kwargs) -> any:
+        """
+        Make OpenAI API call with retry logic for rate limits.
+        
+        Implements exponential backoff for:
+        - 429 Rate Limit errors
+        - 500/502/503 Server errors
+        - Network timeouts
+        """
+        last_exception = None
+        delay = self.INITIAL_DELAY
+        
+        for attempt in range(self.MAX_RETRIES + 1):
+            try:
+                response = await self.client.chat.completions.create(
+                    model=self.model,
+                    **kwargs
+                )
+                self._track_usage(response)
+                return response
+                
+            except Exception as e:
+                last_exception = e
+                error_str = str(e).lower()
+                
+                # Check if retryable error
+                is_rate_limit = "rate_limit" in error_str or "429" in error_str
+                is_server_error = any(code in error_str for code in ["500", "502", "503"])
+                is_timeout = "timeout" in error_str
+                
+                if is_rate_limit or is_server_error or is_timeout:
+                    if attempt < self.MAX_RETRIES:
+                        wait_time = delay * (2 if is_rate_limit else 1)
+                        print(f"⏳ API error, retrying in {wait_time:.1f}s (attempt {attempt + 1}/{self.MAX_RETRIES + 1})")
+                        await asyncio.sleep(wait_time)
+                        delay = min(delay * 2, self.MAX_DELAY)
+                        continue
+                
+                # Non-retryable error or max retries reached
+                raise last_exception
+        
+        raise last_exception
 
     async def generate_insights(self, context: dict) -> list[dict]:
         """Generate financial insights using function calling."""
@@ -138,8 +279,7 @@ Generate 4-6 insights covering:
 5. Optionally: a positive insight (good habit, improvement)"""
 
         try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
+            response = await self._call_with_retry(
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {
@@ -215,10 +355,7 @@ Generate 4-6 insights covering:
                         },
                     }
                 ],
-                tool_choice={
-                    "type": "function",
-                    "function": {"name": "generate_insights"},
-                },
+                tool_choice={"type": "function", "function": {"name": "generate_insights"}},
                 timeout=30,
             )
 
@@ -227,7 +364,7 @@ Generate 4-6 insights covering:
             return result.get("insights", [])
 
         except Exception as e:
-            print(f"AI insight generation error: {e}")
+            print(f"AI insight generation error after retries: {e}")
             return self._fallback_insights(context)
 
     async def generate_goal_advice(
