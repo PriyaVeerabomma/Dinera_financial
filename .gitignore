@@ -1,8 +1,38 @@
+# ======================
+# Environment variables
+# ======================
 .env
+.env.*
+.env.example
+
+# ======================
+# Python
+# ======================
+venv/
 __pycache__/
 *.pyc
+
+# ======================
+# macOS
+# ======================
+.DS_Store
+**/.DS_Store
+
+# ======================
+# Node
+# ======================
 node_modules/
-dist/
-.env.local
-.env.example
-venv
+frontend/node_modules/
+
+# ======================
+# Local databases
+# ======================
+*.db
+*.sqlite
+*.sqlite3
+
+# ======================
+# Archives
+# ======================
+*.tar.gz
+*.zip
