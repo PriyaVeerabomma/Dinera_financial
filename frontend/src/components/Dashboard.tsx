@@ -83,10 +83,13 @@ export function Dashboard({
               {/* <h1 className="text-xl sm:text-2xl font-medium tracking-wide text-textPrimary">
                 DINERA
               </h1> */}
-              {user?.username && (
-
-                <h1 className="text-lg sm:text-xl font-semibold text-textPrimary">
-                  <h1 className="text-xl sm:text-2xl font-medium tracking-wide text-textPrimary">{user.username}'s DINERA </h1>
+              {user?.username ? (
+                <h1 className="text-xl sm:text-2xl font-medium tracking-wide text-textPrimary">
+                  {user.username}'s DINERA
+                </h1>
+              ) : (
+                <h1 className="text-xl sm:text-2xl font-medium tracking-wide text-textPrimary">
+                  DINERA
                 </h1>
               )}
             </div>
@@ -332,8 +335,8 @@ function TabButton({ active, onClick, children, badge, alert }: TabButtonProps) 
     <button
       onClick={onClick}
       className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${active
-          ? 'border-accent text-textPrimary'
-          : 'border-transparent text-muted hover:text-textSecondary'
+        ? 'border-accent text-textPrimary'
+        : 'border-transparent text-muted hover:text-textSecondary'
         }`}
     >
       <span className="flex items-center gap-1.5">
@@ -574,10 +577,10 @@ function AnomaliesList({ anomalies }: AnomaliesListProps) {
               </p>
             </div>
             <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${anomaly.severity === 'high'
-                ? 'bg-[#FFB5B5] text-[#8B0000]'
-                : anomaly.severity === 'medium'
-                  ? 'bg-[#FFEAA7] text-[#856404]'
-                  : 'bg-[#B5EAD7] text-[#155724]'
+              ? 'bg-[#FFB5B5] text-[#8B0000]'
+              : anomaly.severity === 'medium'
+                ? 'bg-[#FFEAA7] text-[#856404]'
+                : 'bg-[#B5EAD7] text-[#155724]'
               }`}>
               {anomaly.severity === 'high' ? 'HIGH' :
                 anomaly.severity === 'medium' ? 'MED' : 'LOW'}

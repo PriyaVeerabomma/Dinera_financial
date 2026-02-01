@@ -72,7 +72,7 @@ interface AppContentProps {
   isLoaded: boolean;
   isSignedIn: boolean;
   getToken: () => Promise<string | null>;
-  user: { primaryEmailAddress?: { emailAddress?: string } } | null;
+  user: { firstName?: string | null; primaryEmailAddress?: { emailAddress?: string } } | null;
   clerkEnabled: boolean;
 }
 
@@ -240,6 +240,7 @@ function AppContent({ isLoaded, isSignedIn, getToken, user, clerkEnabled }: AppC
             error={error}
             sessions={sessions}
             onSwitchSession={handleSwitchSession}
+            user={user ? { username: user.firstName || user.primaryEmailAddress?.emailAddress?.split('@')[0] } : undefined}
           />
         </div>
       );
@@ -265,6 +266,7 @@ function AppContent({ isLoaded, isSignedIn, getToken, user, clerkEnabled }: AppC
             sessions={sessions}
             activeSessionId={activeSessionId}
             onSwitchSession={handleSwitchSession}
+            user={user ? { username: user.firstName || user.primaryEmailAddress?.emailAddress?.split('@')[0] } : undefined}
           />
         </div>
       );
@@ -395,7 +397,7 @@ function SignInView() {
 // =============================================================================
 
 interface UserHeaderProps {
-  user: { primaryEmailAddress?: { emailAddress?: string } } | null;
+  user: { firstName?: string | null; primaryEmailAddress?: { emailAddress?: string } } | null;
   clerkEnabled: boolean;
 }
 

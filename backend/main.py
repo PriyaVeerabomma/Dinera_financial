@@ -21,6 +21,31 @@ Usage:
     uvicorn main:app --reload --host 0.0.0.0 --port 8000
 """
 
+from auth import get_current_user, get_optional_user, is_auth_configured
+from services.observability import (
+    logger, metrics, timed, timed_block,
+    log_analysis_start, log_analysis_complete,
+    log_chat_request
+)
+from services import (
+    AIService, CSVProcessor, Categorizer,
+    AnomalyDetector, RecurringDetector, InsightGenerator,
+    ChatService, PatternAnalyzer, GoalForecaster
+)
+from schemas import (
+    UploadResponse, AnalyzeResponse, DashboardResponse,
+    GoalRequest, GoalResponse, HealthResponse,
+    TransactionOut, AnomalyOut, RecurringChargeOut,
+    InsightOut, DeltaOut, SpendingSummary, GoalCut, CategoryOut,
+    ChatRequest, ChatResponse, SuggestedPromptsResponse,
+    SessionOut, SessionListResponse, UserInfoResponse,
+    ConversationHistoryResponse, ChatMessage
+)
+from models import (
+    Session, Transaction, Category, Anomaly,
+    RecurringCharge, Delta, Insight, Goal,
+    Conversation, Message
+)
 import os
 import time
 from contextlib import asynccontextmanager
@@ -42,19 +67,19 @@ from database import get_db, init_db, SessionLocal
 class RateLimiter:
     """
     Simple in-memory rate limiter to prevent API abuse.
-    
+
     Limits requests per session to prevent:
         - OpenAI budget drain from chat spam
         - Denial of service attacks
         - Runaway clients
-    
+
     Uses sliding window algorithm with configurable limits.
     """
-    
+
     def __init__(self, max_requests: int = 30, window_seconds: int = 60):
         """
         Initialize rate limiter.
-        
+
         Args:
             max_requests: Maximum requests allowed per window.
             window_seconds: Time window in seconds.
@@ -62,34 +87,34 @@ class RateLimiter:
         self.max_requests = max_requests
         self.window_seconds = window_seconds
         self.requests: Dict[str, list] = defaultdict(list)
-    
+
     def is_allowed(self, identifier: str) -> bool:
         """
         Check if request is allowed for given identifier.
-        
+
         Args:
             identifier: Session ID or IP address.
-            
+
         Returns:
             True if request is allowed, False if rate limited.
         """
         now = time.time()
         window_start = now - self.window_seconds
-        
+
         # Clean old requests
         self.requests[identifier] = [
-            t for t in self.requests[identifier] 
+            t for t in self.requests[identifier]
             if t > window_start
         ]
-        
+
         # Check limit
         if len(self.requests[identifier]) >= self.max_requests:
             return False
-        
+
         # Record request
         self.requests[identifier].append(now)
         return True
-    
+
     def get_remaining(self, identifier: str) -> int:
         """Get remaining requests for identifier."""
         now = time.time()
@@ -99,7 +124,7 @@ class RateLimiter:
             if t > window_start
         ]
         return max(0, self.max_requests - len(current_requests))
-    
+
     def get_reset_time(self, identifier: str) -> float:
         """Get seconds until rate limit resets."""
         if identifier not in self.requests or not self.requests[identifier]:
@@ -109,34 +134,10 @@ class RateLimiter:
 
 
 # Global rate limiter instances
-chat_rate_limiter = RateLimiter(max_requests=30, window_seconds=60)  # 30 chat requests per minute
-api_rate_limiter = RateLimiter(max_requests=100, window_seconds=60)  # 100 API requests per minute
-from models import (
-    Session, Transaction, Category, Anomaly,
-    RecurringCharge, Delta, Insight, Goal,
-    Conversation, Message
-)
-from schemas import (
-    UploadResponse, AnalyzeResponse, DashboardResponse,
-    GoalRequest, GoalResponse, HealthResponse,
-    TransactionOut, AnomalyOut, RecurringChargeOut,
-    InsightOut, DeltaOut, SpendingSummary, GoalCut, CategoryOut,
-    ChatRequest, ChatResponse, SuggestedPromptsResponse,
-    SessionOut, SessionListResponse, UserInfoResponse, 
-    ConversationHistoryResponse, ChatMessage
-)
-from services import (
-    AIService, CSVProcessor, Categorizer,
-    AnomalyDetector, RecurringDetector, InsightGenerator,
-    ChatService, PatternAnalyzer, GoalForecaster
-)
-from services.observability import (
-    logger, metrics, timed, timed_block,
-    log_analysis_start, log_analysis_complete,
-    log_chat_request
-)
-from auth import get_current_user, get_optional_user, is_auth_configured
-
+# 30 chat requests per minute
+chat_rate_limiter = RateLimiter(max_requests=30, window_seconds=60)
+# 100 API requests per minute
+api_rate_limiter = RateLimiter(max_requests=100, window_seconds=60)
 
 
 # =============================================================================
@@ -147,11 +148,11 @@ from auth import get_current_user, get_optional_user, is_auth_configured
 async def lifespan(app: FastAPI):
     """
     Manage application startup and shutdown events.
-    
+
     On startup:
         - Initialize database tables
         - Seed default categories
-    
+
     On shutdown:
         - Cleanup resources if needed
     """
@@ -159,9 +160,9 @@ async def lifespan(app: FastAPI):
     print("🚀 Starting Smart Financial Coach API...")
     init_db()
     print("✅ Database initialized with default categories")
-    
+
     yield
-    
+
     # Shutdown
     print("👋 Shutting down Smart Financial Coach API...")
 
@@ -211,7 +212,7 @@ app.add_middleware(
 def get_ai_service() -> AIService:
     """
     Dependency: Provide AIService instance.
-    
+
     Returns:
         AIService: Configured OpenAI wrapper service.
     """
@@ -235,14 +236,14 @@ async def health_check(
 ) -> HealthResponse:
     """
     Perform health check on all system components.
-    
+
     Args:
         db: Database session from dependency injection.
         ai_service: AI service from dependency injection.
-    
+
     Returns:
         HealthResponse: Status of API, database, and OpenAI connection.
-    
+
     Example:
         GET /health
         Response: {"status": "healthy", "database": "connected", "openai": "connected"}
@@ -254,16 +255,16 @@ async def health_check(
         db_status = "connected"
     except Exception as e:
         db_status = f"error: {str(e)}"
-    
+
     # Check OpenAI connection
     try:
         openai_connected = await ai_service.check_connection()
         openai_status = "connected" if openai_connected else "disconnected"
     except Exception as e:
         openai_status = f"error: {str(e)}"
-    
+
     overall_status = "healthy" if db_status == "connected" else "degraded"
-    
+
     return HealthResponse(
         status=overall_status,
         database=db_status,
@@ -280,10 +281,10 @@ async def health_check(
 async def get_metrics():
     """
     Get application metrics for monitoring and debugging.
-    
+
     Returns:
         Dict with counters, timings, and session metrics.
-    
+
     Example:
         GET /metrics
         Response: {
@@ -306,15 +307,15 @@ def verify_session_ownership(
 ) -> Session:
     """
     Verify that a session exists and belongs to the given user.
-    
+
     Args:
         db: Database session.
         session_id: Session ID to verify.
         user_id: Clerk user ID (owner).
-        
+
     Returns:
         Session object if valid.
-        
+
     Raises:
         HTTPException: 404 if session not found or doesn't belong to user.
     """
@@ -324,13 +325,13 @@ def verify_session_ownership(
         .filter(Session.clerk_user_id == user_id)
         .first()
     )
-    
+
     if not session:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Session not found or access denied."
         )
-    
+
     return session
 
 
@@ -350,7 +351,7 @@ async def get_current_user_info(
 ) -> UserInfoResponse:
     """
     Get current user's info and list of sessions.
-    
+
     Returns:
         UserInfoResponse with user ID and list of sessions.
     """
@@ -360,15 +361,16 @@ async def get_current_user_info(
         .order_by(Session.created_at.desc())
         .all()
     )
-    
+
     has_sample = any(s.is_sample for s in sessions)
-    
+
     return UserInfoResponse(
         user_id=user_id,
         sessions=[
             SessionOut(
                 id=s.id,
-                name=s.name or s.filename or ("Sample Data" if s.is_sample else "Uploaded Data"),
+                name=s.name or s.filename or (
+                    "Sample Data" if s.is_sample else "Uploaded Data"),
                 filename=s.filename,
                 row_count=s.row_count,
                 status=s.status,
@@ -394,7 +396,7 @@ async def list_sessions(
 ) -> SessionListResponse:
     """
     List all sessions for the current user.
-    
+
     Returns:
         SessionListResponse with list of sessions.
     """
@@ -404,12 +406,13 @@ async def list_sessions(
         .order_by(Session.created_at.desc())
         .all()
     )
-    
+
     return SessionListResponse(
         sessions=[
             SessionOut(
                 id=s.id,
-                name=s.name or s.filename or ("Sample Data" if s.is_sample else "Uploaded Data"),
+                name=s.name or s.filename or (
+                    "Sample Data" if s.is_sample else "Uploaded Data"),
                 filename=s.filename,
                 row_count=s.row_count,
                 status=s.status,
@@ -434,10 +437,10 @@ async def create_sample_session(
 ) -> UploadResponse:
     """
     Create a sample data session for the current user.
-    
+
     If user already has a sample session, returns the existing one.
     Otherwise, creates a new sample session with synthetic data.
-    
+
     Returns:
         UploadResponse with session ID and transaction count.
     """
@@ -448,7 +451,7 @@ async def create_sample_session(
         .filter(Session.is_sample == True)
         .first()
     )
-    
+
     if existing_sample:
         return UploadResponse(
             session_id=existing_sample.id,
@@ -456,19 +459,19 @@ async def create_sample_session(
             row_count=existing_sample.row_count,
             status=existing_sample.status,
         )
-    
+
     # Create new sample session with synthetic data
     from synthetic_data import SyntheticDataGenerator
-    
+
     generator = SyntheticDataGenerator()
     transactions = generator.generate()
-    
+
     processor = CSVProcessor(db)
-    
+
     # Create session with user ownership
     import uuid
     session_id = str(uuid.uuid4())
-    
+
     session = Session(
         id=session_id,
         clerk_user_id=user_id,
@@ -479,7 +482,7 @@ async def create_sample_session(
         name="Sample Data",
     )
     db.add(session)
-    
+
     # Add transactions
     for txn in transactions:
         transaction = Transaction(
@@ -490,9 +493,9 @@ async def create_sample_session(
             raw_description=txn["description"],
         )
         db.add(transaction)
-    
+
     db.commit()
-    
+
     return UploadResponse(
         session_id=session_id,
         filename="sample_data.csv",
@@ -513,18 +516,18 @@ async def delete_session(
 ):
     """
     Delete a session and all its associated data.
-    
+
     Args:
         session_id: Session ID to delete.
-        
+
     Returns:
         Success message.
     """
     session = verify_session_ownership(db, session_id, user_id)
-    
+
     db.delete(session)
     db.commit()
-    
+
     return {"message": "Session deleted successfully"}
 
 
@@ -540,29 +543,30 @@ async def delete_session(
     description="Upload a CSV file containing financial transactions for analysis."
 )
 async def upload_csv(
-    file: UploadFile = File(..., description="CSV file with columns: date, description, amount"),
+    file: UploadFile = File(...,
+                            description="CSV file with columns: date, description, amount"),
     db: DBSession = Depends(get_db),
     user_id: str = Depends(get_current_user)
 ) -> UploadResponse:
     """
     Upload and process a CSV file containing financial transactions.
-    
+
     The CSV file should contain at least these columns:
         - date: Transaction date (various formats supported)
         - description: Transaction description/merchant name
         - amount: Transaction amount (positive for income, negative for expenses)
-    
+
     Args:
         file: The uploaded CSV file.
         db: Database session from dependency injection.
         user_id: Authenticated user ID from Clerk.
-    
+
     Returns:
         UploadResponse: Session ID and upload metadata.
-    
+
     Raises:
         HTTPException: If file is not a CSV or validation fails.
-    
+
     Example:
         POST /upload
         Content-Type: multipart/form-data
@@ -574,18 +578,18 @@ async def upload_csv(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only CSV files are supported. Please upload a .csv file."
         )
-    
+
     try:
         processor = CSVProcessor(db)
         session_id, row_count = await processor.process(file, clerk_user_id=user_id)
-        
+
         return UploadResponse(
             session_id=session_id,
             filename=file.filename,
             row_count=row_count,
             status="processing"
         )
-    
+
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -611,19 +615,19 @@ async def use_sample_data(
 ) -> UploadResponse:
     """
     Load synthetic sample data for demonstration purposes.
-    
+
     This endpoint generates realistic financial transactions including:
         - Regular patterns (rent, subscriptions, groceries)
         - Anomalies (unusual large purchases)
         - Gray charges (small unknown recurring charges)
-    
+
     Args:
         db: Database session from dependency injection.
         user_id: Authenticated user ID from Clerk.
-    
+
     Returns:
         UploadResponse: Session ID and metadata for the sample data.
-    
+
     Example:
         POST /sample
         Response: {"session_id": "uuid", "filename": "sample_transactions.csv", ...}
@@ -631,18 +635,19 @@ async def use_sample_data(
     try:
         # Import synthetic data generator
         from synthetic_data import generate_synthetic_transactions
-        
+
         transactions = generate_synthetic_transactions()
         processor = CSVProcessor(db)
-        session_id, row_count = processor.process_synthetic(transactions, clerk_user_id=user_id)
-        
+        session_id, row_count = processor.process_synthetic(
+            transactions, clerk_user_id=user_id)
+
         return UploadResponse(
             session_id=session_id,
             filename="sample_transactions.csv",
             row_count=row_count,
             status="processing"
         )
-    
+
     except ImportError:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
@@ -674,77 +679,79 @@ async def analyze_session(
 ) -> AnalyzeResponse:
     """
     Run comprehensive financial analysis on uploaded transactions.
-    
+
     This endpoint orchestrates all analysis services:
         1. Transaction categorization (hybrid rule-based + AI)
         2. Anomaly detection (statistical z-score analysis)
         3. Recurring charge detection (subscriptions, gray charges)
         4. Month-over-month delta calculation
         5. AI insight generation
-    
+
     Args:
         session_id: The session ID from the upload endpoint.
         db: Database session from dependency injection.
         ai_service: AI service from dependency injection.
         user_id: Authenticated user ID from Clerk.
-    
+
     Returns:
         AnalyzeResponse: Summary of analysis results.
-    
+
     Raises:
         HTTPException: If session not found or analysis fails.
-    
+
     Example:
         POST /analyze/abc-123-def
         Response: {"session_id": "abc-123-def", "status": "ready", ...}
     """
     # Verify session exists and belongs to user
     session = verify_session_ownership(db, session_id, user_id)
-    
+
     try:
         # Get transaction count for logging
-        txn_count = db.query(Transaction).filter(Transaction.session_id == session_id).count()
+        txn_count = db.query(Transaction).filter(
+            Transaction.session_id == session_id).count()
         log_analysis_start(session_id, txn_count)
-        
+
         # Step 1: Categorize transactions
         with timed_block("categorization"):
             categorizer = Categorizer(db, ai_service)
             categorized_count = await categorizer.categorize_all(session_id)
             metrics.gauge("last_categorized_count", categorized_count)
-        
+
         # Step 2: Detect anomalies
         with timed_block("anomaly_detection"):
             anomaly_detector = AnomalyDetector(db)
             anomalies_count = anomaly_detector.detect(session_id)
             metrics.gauge("last_anomalies_count", anomalies_count)
-        
+
         # Step 3: Detect recurring charges
         with timed_block("recurring_detection"):
             recurring_detector = RecurringDetector(db)
             recurring_count = recurring_detector.detect(session_id)
-        
+
         # Step 4: Calculate deltas (month-over-month changes)
         insight_gen = InsightGenerator(db, ai_service)
         insight_gen.calculate_deltas(session_id)
-        
+
         # Step 5: Detect spending patterns (NEW - proactive)
         pattern_analyzer = PatternAnalyzer(db, session_id)
         patterns = pattern_analyzer.detect_all()
-        
+
         # Step 6: Run goal forecasting (NEW - proactive)
         goal_forecaster = GoalForecaster(db, session_id)
         forecast = goal_forecaster.analyze()
-        
+
         # Step 7: Generate AI insights
         insights_count = await insight_gen.generate(session_id)
-        
+
         # Step 8: Add pattern-based proactive insights
-        pattern_insights_count = _add_pattern_insights(db, session_id, patterns, forecast)
-        
+        pattern_insights_count = _add_pattern_insights(
+            db, session_id, patterns, forecast)
+
         # Update session status
         session.status = "ready"
         db.commit()
-        
+
         # Log completion
         results = {
             "transactions": categorized_count,
@@ -753,7 +760,7 @@ async def analyze_session(
             "insights": insights_count + pattern_insights_count
         }
         log_analysis_complete(session_id, results)
-        
+
         return AnalyzeResponse(
             session_id=session_id,
             status="ready",
@@ -762,16 +769,17 @@ async def analyze_session(
             recurring_charges_found=recurring_count,
             insights_generated=insights_count + pattern_insights_count
         )
-    
+
     except Exception as e:
         # Log error
-        logger.error("Analysis failed", error=str(e), session_id=session_id[:8])
+        logger.error("Analysis failed", error=str(e),
+                     session_id=session_id[:8])
         metrics.increment("analysis.failed")
-        
+
         # Update session status to error
         session.status = "error"
         db.commit()
-        
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Analysis failed: {str(e)}"
@@ -796,46 +804,46 @@ async def get_dashboard(
 ) -> DashboardResponse:
     """
     Get consolidated dashboard data for a session.
-    
+
     This endpoint returns all analyzed data in a single response:
         - Spending summary (totals, by category)
         - AI-generated insights
         - Detected anomalies
         - Recurring charges
         - Month-over-month deltas
-    
+
     Args:
         session_id: The session ID from the upload endpoint.
         db: Database session from dependency injection.
         user_id: Authenticated user ID from Clerk.
-    
+
     Returns:
         DashboardResponse: Complete dashboard data.
-    
+
     Raises:
         HTTPException: If session not found.
-    
+
     Example:
         GET /dashboard/abc-123-def
     """
     # Verify session exists and belongs to user
     session = verify_session_ownership(db, session_id, user_id)
-    
+
     # Build category lookup
     categories = {c.id: c for c in db.query(Category).all()}
-    
+
     # Get transactions and calculate summary
     transactions = db.query(Transaction).filter(
         Transaction.session_id == session_id
     ).all()
-    
+
     summary = _calculate_spending_summary(transactions, categories)
-    
+
     # Get insights (ordered by priority)
     insights = db.query(Insight).filter(
         Insight.session_id == session_id
     ).order_by(Insight.priority).all()
-    
+
     insights_out = [
         InsightOut(
             id=i.id,
@@ -850,15 +858,16 @@ async def get_dashboard(
         )
         for i in insights
     ]
-    
+
     # Get anomalies
     anomalies = db.query(Anomaly).filter(
         Anomaly.session_id == session_id
     ).all()
-    
+
     anomalies_out = []
     for a in anomalies:
-        txn = db.query(Transaction).filter(Transaction.id == a.transaction_id).first()
+        txn = db.query(Transaction).filter(
+            Transaction.id == a.transaction_id).first()
         if txn:
             cat = categories.get(txn.category_id)
             anomalies_out.append(
@@ -877,12 +886,12 @@ async def get_dashboard(
                     explanation=a.explanation or ""
                 )
             )
-    
+
     # Get recurring charges
     recurring = db.query(RecurringCharge).filter(
         RecurringCharge.session_id == session_id
     ).all()
-    
+
     recurring_out = []
     for r in recurring:
         cat = categories.get(r.category_id)
@@ -906,12 +915,12 @@ async def get_dashboard(
                 confidence=r.confidence or 0.8
             )
         )
-    
+
     # Get deltas
     deltas = db.query(Delta).filter(
         Delta.session_id == session_id
     ).all()
-    
+
     deltas_out = []
     for d in deltas:
         cat = categories.get(d.category_id)
@@ -929,7 +938,7 @@ async def get_dashboard(
                     change_percent=d.change_percent or 0
                 )
             )
-    
+
     return DashboardResponse(
         session_id=session_id,
         status=session.status,
@@ -949,29 +958,29 @@ def _add_pattern_insights(
 ) -> int:
     """
     Add proactive pattern-based insights to the database.
-    
+
     These insights are generated from pattern analysis and goal forecasting,
     providing actionable recommendations without user prompting.
-    
+
     Args:
         db: Database session.
         session_id: Session ID.
         patterns: Detected spending patterns.
         forecast: Goal forecast results.
-    
+
     Returns:
         Number of insights added.
     """
     insights_added = 0
-    
+
     # Add top pattern insights (limit to 3)
     for i, pattern in enumerate(patterns[:3]):
         pattern_type = pattern.get('type', 'pattern')
         yearly_savings = pattern.get('yearly_savings', 0)
-        
+
         if yearly_savings < 200:  # Skip small savings
             continue
-        
+
         # Determine priority based on savings amount
         if yearly_savings >= 1000:
             priority = 1
@@ -979,29 +988,33 @@ def _add_pattern_insights(
             priority = 2
         else:
             priority = 3
-        
+
         # Create insight based on pattern type
         if pattern_type == 'merchant_habit':
             merchant = pattern.get('merchant', 'Unknown')
             title = f"{merchant}: ${pattern.get('monthly_cost', 0):,.0f}/month"
-            description = pattern.get('suggestion', f"Reduce visits to save ${yearly_savings:,.0f}/year")
+            description = pattern.get(
+                'suggestion', f"Reduce visits to save ${yearly_savings:,.0f}/year")
             insight_type = 'savings'
         elif pattern_type == 'category_pattern':
             category = pattern.get('category', 'Unknown')
             title = f"{category} spending: ${pattern.get('monthly_spend', 0):,.0f}/month"
-            description = pattern.get('suggestion', f"Reduce spending to save ${yearly_savings:,.0f}/year")
+            description = pattern.get(
+                'suggestion', f"Reduce spending to save ${yearly_savings:,.0f}/year")
             insight_type = 'spending'
         elif pattern_type == 'weekend_splurge':
             title = "Weekend spending spike detected"
-            description = pattern.get('suggestion', f"Plan ahead to save ${yearly_savings:,.0f}/year")
+            description = pattern.get(
+                'suggestion', f"Plan ahead to save ${yearly_savings:,.0f}/year")
             insight_type = 'spending'
         elif pattern_type == 'payday_impulse':
             title = "Post-payday spending surge"
-            description = pattern.get('suggestion', f"Wait 48 hours before purchases")
+            description = pattern.get(
+                'suggestion', f"Wait 48 hours before purchases")
             insight_type = 'spending'
         else:
             continue
-        
+
         insight = Insight(
             session_id=session_id,
             type=insight_type,
@@ -1015,7 +1028,7 @@ def _add_pattern_insights(
         )
         db.add(insight)
         insights_added += 1
-    
+
     # Add savings capacity insight from forecast
     forecast_insights = forecast.get('insights', [])
     for fi in forecast_insights[:2]:  # Top 2 forecast insights
@@ -1028,7 +1041,7 @@ def _add_pattern_insights(
         else:
             priority = 2
             insight_type = 'savings'
-        
+
         insight = Insight(
             session_id=session_id,
             type=insight_type,
@@ -1042,7 +1055,7 @@ def _add_pattern_insights(
         )
         db.add(insight)
         insights_added += 1
-    
+
     db.commit()
     return insights_added
 
@@ -1053,17 +1066,17 @@ def _calculate_spending_summary(
 ) -> SpendingSummary:
     """
     Calculate spending summary from transactions.
-    
+
     Args:
         transactions: List of transaction objects.
         categories: Dictionary mapping category ID to Category object.
-    
+
     Returns:
         SpendingSummary: Aggregated spending data.
     """
     total_income = sum(t.amount for t in transactions if t.amount > 0)
     total_spending = sum(t.amount for t in transactions if t.amount < 0)
-    
+
     by_category = {}
     for t in transactions:
         if t.category_id and t.category_id in categories:
@@ -1078,7 +1091,7 @@ def _calculate_spending_summary(
                 }
             by_category[cat.name]["amount"] += t.amount
             by_category[cat.name]["count"] += 1
-    
+
     return SpendingSummary(
         total_income=total_income,
         total_spending=total_spending,
@@ -1106,53 +1119,53 @@ async def get_goal_recommendations(
 ) -> GoalResponse:
     """
     Get AI-powered recommendations to achieve a savings goal.
-    
+
     The AI analyzes current spending patterns and suggests specific
     category cuts to help achieve the target savings amount.
-    
+
     Args:
         session_id: The session ID from the upload endpoint.
         goal: GoalRequest with target_amount.
         db: Database session from dependency injection.
         ai_service: AI service from dependency injection.
-    
+
     Returns:
         GoalResponse: Achievability assessment and suggested cuts.
-    
+
     Raises:
         HTTPException: If session not found or goal calculation fails.
-    
+
     Example:
         POST /goal/abc-123-def
         Body: {"target_amount": 500}
     """
     # Verify session exists and belongs to user
     session = verify_session_ownership(db, session_id, user_id)
-    
+
     # Build category lookup
     categories = {c.id: c for c in db.query(Category).all()}
-    
+
     # Get transactions
     transactions = db.query(Transaction).filter(
         Transaction.session_id == session_id
     ).all()
-    
+
     if not transactions:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No transactions found. Please run analysis first."
         )
-    
+
     # Calculate current discretionary spending
     discretionary_spending = 0
     category_spending = {}
-    
+
     for t in transactions:
         if t.amount < 0 and t.category_id:
             cat = categories.get(t.category_id)
             if cat and not cat.is_essential:
                 discretionary_spending += abs(t.amount)
-                
+
                 if cat.name not in category_spending:
                     category_spending[cat.name] = {
                         "amount": 0,
@@ -1160,15 +1173,15 @@ async def get_goal_recommendations(
                         "is_essential": cat.is_essential
                     }
                 category_spending[cat.name]["amount"] += abs(t.amount)
-    
+
     # Estimate monthly average (assuming 3 months of data)
     monthly_discretionary = discretionary_spending / 3
-    
+
     # Determine achievability
     target = goal.target_amount
     achievable = monthly_discretionary >= target
     gap = 0 if achievable else target - monthly_discretionary
-    
+
     # Generate suggested cuts (prioritize non-essential, larger categories)
     suggested_cuts = []
     sorted_categories = sorted(
@@ -1176,14 +1189,14 @@ async def get_goal_recommendations(
         key=lambda x: x[1]["amount"],
         reverse=True
     )
-    
+
     remaining_target = target
     for cat_name, data in sorted_categories:
         if remaining_target <= 0:
             break
-        
+
         monthly_amount = data["amount"] / 3
-        
+
         # Suggest cutting 20-50% depending on category type
         if cat_name in ["Entertainment", "Shopping", "Dining"]:
             cut_percent = 0.30  # 30% cut
@@ -1194,10 +1207,10 @@ async def get_goal_recommendations(
         else:
             cut_percent = 0.20  # 20% cut
             difficulty = "moderate"
-        
+
         savings = monthly_amount * cut_percent
         remaining_target -= savings
-        
+
         suggested_cuts.append(
             GoalCut(
                 category=cat_name,
@@ -1209,9 +1222,9 @@ async def get_goal_recommendations(
                 is_essential=data["is_essential"]
             )
         )
-    
+
     total_potential_savings = sum(c.savings for c in suggested_cuts)
-    
+
     # Get AI advice
     context = {
         "monthly_discretionary": monthly_discretionary,
@@ -1219,11 +1232,11 @@ async def get_goal_recommendations(
         "achievable": achievable,
         "categories": category_spending
     }
-    
+
     ai_advice = await ai_service.generate_goal_advice(
         context, target, [c.model_dump() for c in suggested_cuts]
     )
-    
+
     # Store goal in database
     goal_record = Goal(
         session_id=session_id,
@@ -1234,7 +1247,7 @@ async def get_goal_recommendations(
     )
     db.add(goal_record)
     db.commit()
-    
+
     return GoalResponse(
         target_amount=target,
         current_discretionary=monthly_discretionary,
@@ -1266,19 +1279,19 @@ async def get_transactions(
 ) -> list[TransactionOut]:
     """
     Get paginated list of transactions for a session.
-    
+
     Args:
         session_id: The session ID.
         limit: Maximum number of transactions to return (default 100).
         offset: Number of transactions to skip (default 0).
         db: Database session from dependency injection.
-    
+
     Returns:
         List of TransactionOut objects.
     """
     # Verify session exists and belongs to user
     session = verify_session_ownership(db, session_id, user_id)
-    
+
     transactions = (
         db.query(Transaction)
         .filter(Transaction.session_id == session_id)
@@ -1287,9 +1300,9 @@ async def get_transactions(
         .limit(limit)
         .all()
     )
-    
+
     categories = {c.id: c for c in db.query(Category).all()}
-    
+
     return [
         TransactionOut(
             id=t.id,
@@ -1322,15 +1335,15 @@ async def get_categories(
 ) -> list[CategoryOut]:
     """
     Get all available categories.
-    
+
     Args:
         db: Database session from dependency injection.
-    
+
     Returns:
         List of CategoryOut objects.
     """
     categories = db.query(Category).all()
-    
+
     return [
         CategoryOut(
             id=c.id,
@@ -1361,20 +1374,20 @@ async def chat(
 ):
     """
     Chat with the AI financial coach.
-    
+
     The AI has access to your financial data and can answer questions about:
     - Spending patterns and summaries
     - Anomalies and unusual transactions
     - Recurring charges and subscriptions
     - Personalized recommendations
-    
+
     Rate limited to 30 requests per minute per session to prevent abuse.
-    
+
     Args:
         session_id: The session ID from upload.
         request: ChatRequest with message and optional conversation_id.
         db: Database session.
-    
+
     Returns:
         StreamingResponse with the AI's reply.
     """
@@ -1391,15 +1404,15 @@ async def chat(
                 "X-RateLimit-Reset": str(int(reset_time)),
             }
         )
-    
+
     # Log chat request
     log_chat_request(session_id, len(request.message))
-    
+
     # Verify session exists and belongs to user
     session = verify_session_ownership(db, session_id, user_id)
-    
+
     chat_service = ChatService(db)
-    
+
     async def generate():
         """Generate streaming response."""
         async for chunk in chat_service.chat(
@@ -1408,7 +1421,7 @@ async def chat(
             request.conversation_id
         ):
             yield chunk
-    
+
     return StreamingResponse(
         generate(),
         media_type="text/plain"
@@ -1430,20 +1443,20 @@ async def chat_sync(
 ) -> ChatResponse:
     """
     Chat with the AI financial coach (non-streaming version).
-    
+
     Same as /chat but returns the complete response at once
     instead of streaming. Useful for clients that don't support streaming.
-    
+
     Rate limited to 30 requests per minute per session to prevent abuse.
-    
+
     Args:
         session_id: The session ID from upload.
         request: ChatRequest with message and optional conversation_id.
         db: Database session.
-    
+
     Raises:
         HTTPException: 429 if rate limit exceeded.
-    
+
     Returns:
         ChatResponse with the complete message.
     """
@@ -1459,23 +1472,23 @@ async def chat_sync(
                 "X-RateLimit-Reset": str(int(reset_time)),
             }
         )
-    
+
     # Verify session exists and belongs to user
     session = verify_session_ownership(db, session_id, user_id)
-    
+
     chat_service = ChatService(db)
-    
+
     # Collect all chunks into a single response
     full_response = ""
     conversation_id = request.conversation_id
-    
+
     async for chunk in chat_service.chat(
         session_id,
         request.message,
         conversation_id
     ):
         full_response += chunk
-    
+
     # Get the conversation ID from the most recent conversation
     if not conversation_id:
         conv = db.query(Conversation).filter(
@@ -1483,10 +1496,10 @@ async def chat_sync(
         ).order_by(Conversation.created_at.desc()).first()
         if conv:
             conversation_id = conv.id
-    
+
     # Get suggested prompts
     suggested_prompts = chat_service.get_suggested_prompts(session_id)
-    
+
     return ChatResponse(
         conversation_id=conversation_id or "",
         message=full_response,
@@ -1508,23 +1521,23 @@ async def get_suggested_prompts(
 ) -> SuggestedPromptsResponse:
     """
     Get suggested prompts for the chat interface.
-    
+
     Returns contextual prompts based on what's in the user's data,
     like "Tell me about the 3 anomalies" if anomalies exist.
-    
+
     Args:
         session_id: The session ID.
         db: Database session.
-    
+
     Returns:
         SuggestedPromptsResponse with list of prompts.
     """
     # Verify session exists and belongs to user
     session = verify_session_ownership(db, session_id, user_id)
-    
+
     chat_service = ChatService(db)
     prompts = chat_service.get_suggested_prompts(session_id)
-    
+
     return SuggestedPromptsResponse(prompts=prompts)
 
 
@@ -1542,12 +1555,12 @@ async def get_conversation_history(
 ) -> ConversationHistoryResponse:
     """
     Get the message history for a conversation.
-    
+
     Args:
         session_id: The session ID.
         conversation_id: The conversation ID.
         db: Database session.
-    
+
     Returns:
         ConversationHistoryResponse with messages.
     """
@@ -1555,13 +1568,13 @@ async def get_conversation_history(
         Conversation.id == conversation_id,
         Conversation.session_id == session_id
     ).first()
-    
+
     if not conversation:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Conversation {conversation_id} not found."
         )
-    
+
     messages = [
         ChatMessage(
             role=m.role,
@@ -1571,7 +1584,7 @@ async def get_conversation_history(
         for m in conversation.messages
         if m.role in ["user", "assistant"]
     ]
-    
+
     return ConversationHistoryResponse(
         conversation_id=conversation_id,
         messages=messages,
@@ -1585,7 +1598,7 @@ async def get_conversation_history(
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
