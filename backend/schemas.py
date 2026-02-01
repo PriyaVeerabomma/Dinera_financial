@@ -191,3 +191,35 @@ class ConversationHistoryResponse(BaseModel):
     conversation_id: str
     messages: list[ChatMessage]
     created_at: Optional[datetime] = None
+
+
+# =============================================================================
+# Session Management Schemas
+# =============================================================================
+
+class SessionOut(BaseModel):
+    """Session response schema for session listing."""
+    id: str
+    name: Optional[str] = None
+    filename: Optional[str] = None
+    row_count: Optional[int] = None
+    status: str
+    is_sample: bool = False
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class SessionListResponse(BaseModel):
+    """Response schema for listing user sessions."""
+    sessions: list[SessionOut]
+    active_session_id: Optional[str] = None
+
+
+class UserInfoResponse(BaseModel):
+    """Response schema for current user info."""
+    user_id: str
+    sessions: list[SessionOut]
+    has_sample_session: bool
+    active_session_id: Optional[str] = None

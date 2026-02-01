@@ -3,6 +3,7 @@
  * 
  * Provides typed fetch wrappers for all backend endpoints.
  * Handles errors consistently and returns typed responses.
+ * Includes Clerk authentication support.
  */
 
 import type {
@@ -15,10 +16,45 @@ import type {
   ChatResponse,
   SuggestedPromptsResponse,
   ConversationHistory,
+  UserSession,
+  SessionListResponse,
 } from '../types';
 
 // Base URL for API requests
 const API_BASE = 'http://localhost:8000';
+
+// =============================================================================
+// Authentication
+// =============================================================================
+
+// Token getter function - will be set by the auth hook
+let getAuthToken: (() => Promise<string | null>) | null = null;
+
+/**
+ * Set the token getter function.
+ * Called by the auth hook when Clerk is initialized.
+ */
+export function setTokenGetter(getter: () => Promise<string | null>) {
+  getAuthToken = getter;
+}
+
+/**
+ * Get authorization headers if authentication is configured.
+ */
+async function getAuthHeaders(): Promise<HeadersInit> {
+  if (!getAuthToken) {
+    return {};
+  }
+  
+  const token = await getAuthToken();
+  if (!token) {
+    return {};
+  }
+  
+  return {
+    'Authorization': `Bearer ${token}`,
+  };
+}
 
 // =============================================================================
 // Error Handling
@@ -47,6 +83,15 @@ async function handleResponse<T>(response: Response): Promise<T> {
       details = errorBody;
     }
     
+    // Special handling for 401
+    if (response.status === 401) {
+      throw new ApiError(
+        'Authentication required. Please sign in.',
+        response.status,
+        details
+      );
+    }
+    
     throw new ApiError(
       `API Error: ${response.status}`,
       response.status,
@@ -73,6 +118,59 @@ export async function checkHealth(): Promise<HealthStatus> {
 }
 
 // =============================================================================
+// User & Session Endpoints
+// =============================================================================
+
+/**
+ * Get current user info and sessions.
+ */
+export async function getCurrentUser(): Promise<UserSession> {
+  const authHeaders = await getAuthHeaders();
+  const response = await fetch(`${API_BASE}/me`, {
+    headers: authHeaders,
+  });
+  return handleResponse<UserSession>(response);
+}
+
+/**
+ * Get list of user's sessions.
+ */
+export async function getSessions(): Promise<SessionListResponse> {
+  const authHeaders = await getAuthHeaders();
+  const response = await fetch(`${API_BASE}/sessions`, {
+    headers: authHeaders,
+  });
+  return handleResponse<SessionListResponse>(response);
+}
+
+/**
+ * Create sample session for user.
+ */
+export async function createSampleSession(): Promise<UploadResponse> {
+  const authHeaders = await getAuthHeaders();
+  const response = await fetch(`${API_BASE}/sessions/sample`, {
+    method: 'POST',
+    headers: authHeaders,
+  });
+  return handleResponse<UploadResponse>(response);
+}
+
+/**
+ * Delete a session.
+ */
+export async function deleteSession(sessionId: string): Promise<void> {
+  const authHeaders = await getAuthHeaders();
+  const response = await fetch(`${API_BASE}/sessions/${sessionId}`, {
+    method: 'DELETE',
+    headers: authHeaders,
+  });
+  
+  if (!response.ok) {
+    throw new ApiError('Failed to delete session', response.status);
+  }
+}
+
+// =============================================================================
 // Upload Endpoints
 // =============================================================================
 
@@ -80,11 +178,13 @@ export async function checkHealth(): Promise<HealthStatus> {
  * Upload a CSV file for processing.
  */
 export async function uploadCSV(file: File): Promise<UploadResponse> {
+  const authHeaders = await getAuthHeaders();
   const formData = new FormData();
   formData.append('file', file);
   
   const response = await fetch(`${API_BASE}/upload`, {
     method: 'POST',
+    headers: authHeaders,
     body: formData,
   });
   
@@ -95,8 +195,10 @@ export async function uploadCSV(file: File): Promise<UploadResponse> {
  * Load sample transaction data for demo.
  */
 export async function useSampleData(): Promise<UploadResponse> {
+  const authHeaders = await getAuthHeaders();
   const response = await fetch(`${API_BASE}/sample`, {
     method: 'POST',
+    headers: authHeaders,
   });
   
   return handleResponse<UploadResponse>(response);
@@ -111,8 +213,10 @@ export async function useSampleData(): Promise<UploadResponse> {
  * This triggers categorization, anomaly detection, recurring detection, and insight generation.
  */
 export async function analyzeSession(sessionId: string): Promise<AnalyzeResponse> {
+  const authHeaders = await getAuthHeaders();
   const response = await fetch(`${API_BASE}/analyze/${sessionId}`, {
     method: 'POST',
+    headers: authHeaders,
   });
   
   return handleResponse<AnalyzeResponse>(response);
@@ -126,7 +230,10 @@ export async function analyzeSession(sessionId: string): Promise<AnalyzeResponse
  * Get consolidated dashboard data for a session.
  */
 export async function getDashboard(sessionId: string): Promise<DashboardResponse> {
-  const response = await fetch(`${API_BASE}/dashboard/${sessionId}`);
+  const authHeaders = await getAuthHeaders();
+  const response = await fetch(`${API_BASE}/dashboard/${sessionId}`, {
+    headers: authHeaders,
+  });
   return handleResponse<DashboardResponse>(response);
 }
 
@@ -141,9 +248,11 @@ export async function getGoalRecommendations(
   sessionId: string,
   targetAmount: number
 ): Promise<GoalResponse> {
+  const authHeaders = await getAuthHeaders();
   const response = await fetch(`${API_BASE}/goal/${sessionId}`, {
     method: 'POST',
     headers: {
+      ...authHeaders,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ target_amount: targetAmount }),
@@ -164,13 +273,15 @@ export async function getTransactions(
   limit: number = 100,
   offset: number = 0
 ): Promise<Transaction[]> {
+  const authHeaders = await getAuthHeaders();
   const params = new URLSearchParams({
     limit: limit.toString(),
     offset: offset.toString(),
   });
   
   const response = await fetch(
-    `${API_BASE}/transactions/${sessionId}?${params}`
+    `${API_BASE}/transactions/${sessionId}?${params}`,
+    { headers: authHeaders }
   );
   
   return handleResponse<Transaction[]>(response);
@@ -245,9 +356,11 @@ export async function sendChatMessage(
   message: string,
   conversationId?: string | null
 ): Promise<ChatResponse> {
+  const authHeaders = await getAuthHeaders();
   const response = await fetch(`${API_BASE}/chat/${sessionId}/sync`, {
     method: 'POST',
     headers: {
+      ...authHeaders,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -268,9 +381,11 @@ export async function sendChatMessageStream(
   message: string,
   conversationId?: string | null
 ): Promise<Response> {
+  const authHeaders = await getAuthHeaders();
   return fetch(`${API_BASE}/chat/${sessionId}`, {
     method: 'POST',
     headers: {
+      ...authHeaders,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -286,7 +401,10 @@ export async function sendChatMessageStream(
 export async function getSuggestedPrompts(
   sessionId: string
 ): Promise<SuggestedPromptsResponse> {
-  const response = await fetch(`${API_BASE}/chat/${sessionId}/prompts`);
+  const authHeaders = await getAuthHeaders();
+  const response = await fetch(`${API_BASE}/chat/${sessionId}/prompts`, {
+    headers: authHeaders,
+  });
   return handleResponse<SuggestedPromptsResponse>(response);
 }
 
@@ -297,8 +415,10 @@ export async function getConversationHistory(
   sessionId: string,
   conversationId: string
 ): Promise<ConversationHistory> {
+  const authHeaders = await getAuthHeaders();
   const response = await fetch(
-    `${API_BASE}/chat/${sessionId}/history/${conversationId}`
+    `${API_BASE}/chat/${sessionId}/history/${conversationId}`,
+    { headers: authHeaders }
   );
   return handleResponse<ConversationHistory>(response);
 }

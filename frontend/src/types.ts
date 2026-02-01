@@ -214,3 +214,29 @@ export interface ConversationHistory {
   messages: ChatMessage[];
   created_at?: string;
 }
+
+// =============================================================================
+// User & Sessions
+// =============================================================================
+
+export interface Session {
+  id: string;
+  name: string | null;
+  filename: string | null;
+  row_count: number | null;
+  status: string;
+  is_sample: boolean;
+  created_at: string;
+}
+
+export interface SessionListResponse {
+  sessions: Session[];
+  active_session_id: string | null;
+}
+
+export interface UserSession {
+  user_id: string;
+  sessions: Session[];
+  has_sample_session: boolean;
+  active_session_id: string | null;
+}

@@ -1,6 +1,6 @@
 """
 Module: privacy_layer.py
-Description: Anonymizes transaction data before sending to external AI services.
+Description: Anonymizes transaction data before sending to external AI services
 
 Privacy Principles:
     - Never send raw merchant names to OpenAI

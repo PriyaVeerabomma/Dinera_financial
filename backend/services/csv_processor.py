@@ -47,8 +47,21 @@ class CSVProcessor:
         self.db = db
         self.validation_warnings: List[str] = []
 
-    async def process(self, file: UploadFile) -> tuple[str, int]:
-        """Process uploaded CSV and create session with transactions."""
+    async def process(
+        self, 
+        file: UploadFile, 
+        clerk_user_id: str = None
+    ) -> tuple[str, int]:
+        """
+        Process uploaded CSV and create session with transactions.
+        
+        Args:
+            file: Uploaded CSV file.
+            clerk_user_id: Clerk user ID for session ownership.
+            
+        Returns:
+            Tuple of (session_id, row_count).
+        """
         self.validation_warnings = []
         
         # Read file content
@@ -83,13 +96,16 @@ class CSVProcessor:
         # Validate data sanity
         df = self._validate_data_sanity(df)
 
-        # Create session
+        # Create session with user ownership
         session_id = str(uuid.uuid4())
         session = Session(
             id=session_id,
+            clerk_user_id=clerk_user_id or "anonymous",
             filename=file.filename,
             row_count=len(df),
             status="processing",
+            is_sample=False,
+            name=file.filename.replace('.csv', '') if file.filename else "Uploaded Data",
         )
         self.db.add(session)
 
@@ -107,14 +123,30 @@ class CSVProcessor:
         self.db.commit()
         return session_id, len(df)
 
-    def process_synthetic(self, transactions: list[dict]) -> tuple[str, int]:
-        """Process synthetic transaction data."""
+    def process_synthetic(
+        self, 
+        transactions: list[dict],
+        clerk_user_id: str = None
+    ) -> tuple[str, int]:
+        """
+        Process synthetic transaction data.
+        
+        Args:
+            transactions: List of transaction dictionaries.
+            clerk_user_id: Clerk user ID for session ownership.
+            
+        Returns:
+            Tuple of (session_id, row_count).
+        """
         session_id = str(uuid.uuid4())
         session = Session(
             id=session_id,
+            clerk_user_id=clerk_user_id or "anonymous",
             filename="sample_transactions.csv",
             row_count=len(transactions),
             status="processing",
+            is_sample=True,
+            name="Sample Data",
         )
         self.db.add(session)
 

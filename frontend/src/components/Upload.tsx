@@ -2,20 +2,31 @@
  * Upload Component
  * 
  * Drag-and-drop CSV file upload with "Use Sample Data" option.
+ * Includes session switcher for returning users.
  * Follows design system: warm neutral palette, no visual noise.
  */
 
 import { useState, useCallback, DragEvent, ChangeEvent } from 'react';
-import { Upload as UploadIcon, FileText, Loader2 } from 'lucide-react';
+import { Upload as UploadIcon, FileText, Loader2, Clock } from 'lucide-react';
+import type { Session } from '../types';
 
 interface UploadProps {
   onFileUpload: (file: File) => Promise<void>;
   onUseSampleData: () => Promise<void>;
   isLoading: boolean;
   error: string | null;
+  sessions?: Session[];
+  onSwitchSession?: (sessionId: string) => void;
 }
 
-export function Upload({ onFileUpload, onUseSampleData, isLoading, error }: UploadProps) {
+export function Upload({ 
+  onFileUpload, 
+  onUseSampleData, 
+  isLoading, 
+  error,
+  sessions = [],
+  onSwitchSession
+}: UploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 

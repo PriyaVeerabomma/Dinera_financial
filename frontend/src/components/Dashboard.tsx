@@ -16,9 +16,18 @@ import { ChatInterface } from './ChatInterface';
 interface DashboardProps {
   data: DashboardResponse;
   onReset: () => void;
+  sessions?: { id: string; name: string | null; is_sample: boolean }[];
+  activeSessionId?: string | null;
+  onSwitchSession?: (sessionId: string) => void;
 }
 
-export function Dashboard({ data, onReset }: DashboardProps) {
+export function Dashboard({ 
+  data, 
+  onReset,
+  sessions = [],
+  activeSessionId,
+  onSwitchSession
+}: DashboardProps) {
   const { summary, insights, anomalies, recurring_charges } = data;
   const [suggestedPrompts, setSuggestedPrompts] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<'overview' | 'anomalies' | 'recurring' | 'insights'>('overview');

@@ -1,31 +1,63 @@
-"""SQLAlchemy ORM models for 8 production-grade tables."""
+"""
+SQLAlchemy ORM models for Smart Financial Coach.
+
+Includes:
+    - Session (with clerk_user_id for multi-user support)
+    - Transaction, Category, Anomaly, RecurringCharge
+    - Delta, Insight, Goal
+    - Conversation, Message
+
+Author: Smart Financial Coach Team
+"""
 
 from datetime import datetime, date
 from sqlalchemy import (
     Column, Integer, String, Float, Boolean, Date, DateTime,
-    ForeignKey, Text, JSON
+    ForeignKey, Text, JSON, Index
 )
 from sqlalchemy.orm import relationship
 from database import Base
 
 
 class Session(Base):
-    """Upload session tracking."""
+    """
+    Upload session tracking.
+    
+    Each upload creates a new session. Users can have multiple sessions.
+    All data is scoped by clerk_user_id for multi-user isolation.
+    """
     __tablename__ = "sessions"
 
     id = Column(String, primary_key=True)
+    
+    # User ownership (required for multi-user support)
+    clerk_user_id = Column(String, nullable=False, index=True)
+    
+    # Session metadata
     created_at = Column(DateTime, default=datetime.utcnow)
     filename = Column(String)
     row_count = Column(Integer)
     status = Column(String, default="processing")  # processing|ready|error
+    
+    # Sample data flag
+    is_sample = Column(Boolean, default=False)
+    
+    # Display name for session switcher
+    name = Column(String)
 
-    transactions = relationship("Transaction", back_populates="session")
-    anomalies = relationship("Anomaly", back_populates="session")
-    recurring_charges = relationship("RecurringCharge", back_populates="session")
-    deltas = relationship("Delta", back_populates="session")
-    insights = relationship("Insight", back_populates="session")
-    goals = relationship("Goal", back_populates="session")
-    conversations = relationship("Conversation", back_populates="session")
+    # Relationships
+    transactions = relationship("Transaction", back_populates="session", cascade="all, delete-orphan")
+    anomalies = relationship("Anomaly", back_populates="session", cascade="all, delete-orphan")
+    recurring_charges = relationship("RecurringCharge", back_populates="session", cascade="all, delete-orphan")
+    deltas = relationship("Delta", back_populates="session", cascade="all, delete-orphan")
+    insights = relationship("Insight", back_populates="session", cascade="all, delete-orphan")
+    goals = relationship("Goal", back_populates="session", cascade="all, delete-orphan")
+    conversations = relationship("Conversation", back_populates="session", cascade="all, delete-orphan")
+    
+    # Index for faster user queries
+    __table_args__ = (
+        Index('ix_sessions_clerk_user_id_created', 'clerk_user_id', 'created_at'),
+    )
 
 
 class Category(Base):

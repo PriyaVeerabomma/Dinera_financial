@@ -121,7 +121,8 @@ from schemas import (
     GoalRequest, GoalResponse, HealthResponse,
     TransactionOut, AnomalyOut, RecurringChargeOut,
     InsightOut, DeltaOut, SpendingSummary, GoalCut, CategoryOut,
-    ChatRequest, ChatResponse, SuggestedPromptsResponse, 
+    ChatRequest, ChatResponse, SuggestedPromptsResponse,
+    SessionOut, SessionListResponse, UserInfoResponse, 
     ConversationHistoryResponse, ChatMessage
 )
 from services import (
@@ -134,6 +135,8 @@ from services.observability import (
     log_analysis_start, log_analysis_complete,
     log_chat_request
 )
+from auth import get_current_user, get_optional_user, is_auth_configured
+
 
 
 # =============================================================================
@@ -291,6 +294,238 @@ async def get_metrics():
     return metrics.get_summary()
 
 
+# =============================================================================
+# Session Ownership Helper
+# =============================================================================
+
+def verify_session_ownership(
+    db: DBSession,
+    session_id: str,
+    user_id: str
+) -> Session:
+    """
+    Verify that a session exists and belongs to the given user.
+    
+    Args:
+        db: Database session.
+        session_id: Session ID to verify.
+        user_id: Clerk user ID (owner).
+        
+    Returns:
+        Session object if valid.
+        
+    Raises:
+        HTTPException: 404 if session not found or doesn't belong to user.
+    """
+    session = (
+        db.query(Session)
+        .filter(Session.id == session_id)
+        .filter(Session.clerk_user_id == user_id)
+        .first()
+    )
+    
+    if not session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session not found or access denied."
+        )
+    
+    return session
+
+
+# =============================================================================
+# User & Session Management Endpoints
+# =============================================================================
+
+@app.get(
+    "/me",
+    response_model=UserInfoResponse,
+    tags=["User"],
+    summary="Get current user info and sessions",
+)
+async def get_current_user_info(
+    db: DBSession = Depends(get_db),
+    user_id: str = Depends(get_current_user)
+) -> UserInfoResponse:
+    """
+    Get current user's info and list of sessions.
+    
+    Returns:
+        UserInfoResponse with user ID and list of sessions.
+    """
+    sessions = (
+        db.query(Session)
+        .filter(Session.clerk_user_id == user_id)
+        .order_by(Session.created_at.desc())
+        .all()
+    )
+    
+    has_sample = any(s.is_sample for s in sessions)
+    
+    return UserInfoResponse(
+        user_id=user_id,
+        sessions=[
+            SessionOut(
+                id=s.id,
+                name=s.name or s.filename or ("Sample Data" if s.is_sample else "Uploaded Data"),
+                filename=s.filename,
+                row_count=s.row_count,
+                status=s.status,
+                is_sample=s.is_sample,
+                created_at=s.created_at,
+            )
+            for s in sessions
+        ],
+        has_sample_session=has_sample,
+        active_session_id=sessions[0].id if sessions else None,
+    )
+
+
+@app.get(
+    "/sessions",
+    response_model=SessionListResponse,
+    tags=["User"],
+    summary="List user's sessions",
+)
+async def list_sessions(
+    db: DBSession = Depends(get_db),
+    user_id: str = Depends(get_current_user)
+) -> SessionListResponse:
+    """
+    List all sessions for the current user.
+    
+    Returns:
+        SessionListResponse with list of sessions.
+    """
+    sessions = (
+        db.query(Session)
+        .filter(Session.clerk_user_id == user_id)
+        .order_by(Session.created_at.desc())
+        .all()
+    )
+    
+    return SessionListResponse(
+        sessions=[
+            SessionOut(
+                id=s.id,
+                name=s.name or s.filename or ("Sample Data" if s.is_sample else "Uploaded Data"),
+                filename=s.filename,
+                row_count=s.row_count,
+                status=s.status,
+                is_sample=s.is_sample,
+                created_at=s.created_at,
+            )
+            for s in sessions
+        ],
+        active_session_id=sessions[0].id if sessions else None,
+    )
+
+
+@app.post(
+    "/sessions/sample",
+    response_model=UploadResponse,
+    tags=["User"],
+    summary="Create sample session for user",
+)
+async def create_sample_session(
+    db: DBSession = Depends(get_db),
+    user_id: str = Depends(get_current_user)
+) -> UploadResponse:
+    """
+    Create a sample data session for the current user.
+    
+    If user already has a sample session, returns the existing one.
+    Otherwise, creates a new sample session with synthetic data.
+    
+    Returns:
+        UploadResponse with session ID and transaction count.
+    """
+    # Check if user already has a sample session
+    existing_sample = (
+        db.query(Session)
+        .filter(Session.clerk_user_id == user_id)
+        .filter(Session.is_sample == True)
+        .first()
+    )
+    
+    if existing_sample:
+        return UploadResponse(
+            session_id=existing_sample.id,
+            filename=existing_sample.filename,
+            row_count=existing_sample.row_count,
+            status=existing_sample.status,
+        )
+    
+    # Create new sample session with synthetic data
+    from synthetic_data import SyntheticDataGenerator
+    
+    generator = SyntheticDataGenerator()
+    transactions = generator.generate()
+    
+    processor = CSVProcessor(db)
+    
+    # Create session with user ownership
+    import uuid
+    session_id = str(uuid.uuid4())
+    
+    session = Session(
+        id=session_id,
+        clerk_user_id=user_id,
+        filename="sample_data.csv",
+        row_count=len(transactions),
+        status="processing",
+        is_sample=True,
+        name="Sample Data",
+    )
+    db.add(session)
+    
+    # Add transactions
+    for txn in transactions:
+        transaction = Transaction(
+            session_id=session_id,
+            date=txn["date"],
+            description=txn["description"],
+            amount=txn["amount"],
+            raw_description=txn["description"],
+        )
+        db.add(transaction)
+    
+    db.commit()
+    
+    return UploadResponse(
+        session_id=session_id,
+        filename="sample_data.csv",
+        row_count=len(transactions),
+        status="processing",
+    )
+
+
+@app.delete(
+    "/sessions/{session_id}",
+    tags=["User"],
+    summary="Delete a session",
+)
+async def delete_session(
+    session_id: str,
+    db: DBSession = Depends(get_db),
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Delete a session and all its associated data.
+    
+    Args:
+        session_id: Session ID to delete.
+        
+    Returns:
+        Success message.
+    """
+    session = verify_session_ownership(db, session_id, user_id)
+    
+    db.delete(session)
+    db.commit()
+    
+    return {"message": "Session deleted successfully"}
+
 
 # =============================================================================
 # Upload Endpoints
@@ -305,7 +540,8 @@ async def get_metrics():
 )
 async def upload_csv(
     file: UploadFile = File(..., description="CSV file with columns: date, description, amount"),
-    db: DBSession = Depends(get_db)
+    db: DBSession = Depends(get_db),
+    user_id: str = Depends(get_current_user)
 ) -> UploadResponse:
     """
     Upload and process a CSV file containing financial transactions.
@@ -318,6 +554,7 @@ async def upload_csv(
     Args:
         file: The uploaded CSV file.
         db: Database session from dependency injection.
+        user_id: Authenticated user ID from Clerk.
     
     Returns:
         UploadResponse: Session ID and upload metadata.
@@ -339,7 +576,7 @@ async def upload_csv(
     
     try:
         processor = CSVProcessor(db)
-        session_id, row_count = await processor.process(file)
+        session_id, row_count = await processor.process(file, clerk_user_id=user_id)
         
         return UploadResponse(
             session_id=session_id,
@@ -368,7 +605,8 @@ async def upload_csv(
     description="Load pre-generated sample transaction data for demonstration."
 )
 async def use_sample_data(
-    db: DBSession = Depends(get_db)
+    db: DBSession = Depends(get_db),
+    user_id: str = Depends(get_current_user)
 ) -> UploadResponse:
     """
     Load synthetic sample data for demonstration purposes.
@@ -380,6 +618,7 @@ async def use_sample_data(
     
     Args:
         db: Database session from dependency injection.
+        user_id: Authenticated user ID from Clerk.
     
     Returns:
         UploadResponse: Session ID and metadata for the sample data.
@@ -394,7 +633,7 @@ async def use_sample_data(
         
         transactions = generate_synthetic_transactions()
         processor = CSVProcessor(db)
-        session_id, row_count = processor.process_synthetic(transactions)
+        session_id, row_count = processor.process_synthetic(transactions, clerk_user_id=user_id)
         
         return UploadResponse(
             session_id=session_id,
@@ -429,7 +668,8 @@ async def use_sample_data(
 async def analyze_session(
     session_id: str,
     db: DBSession = Depends(get_db),
-    ai_service: AIService = Depends(get_ai_service)
+    ai_service: AIService = Depends(get_ai_service),
+    user_id: str = Depends(get_current_user)
 ) -> AnalyzeResponse:
     """
     Run comprehensive financial analysis on uploaded transactions.
@@ -445,6 +685,7 @@ async def analyze_session(
         session_id: The session ID from the upload endpoint.
         db: Database session from dependency injection.
         ai_service: AI service from dependency injection.
+        user_id: Authenticated user ID from Clerk.
     
     Returns:
         AnalyzeResponse: Summary of analysis results.
@@ -456,13 +697,8 @@ async def analyze_session(
         POST /analyze/abc-123-def
         Response: {"session_id": "abc-123-def", "status": "ready", ...}
     """
-    # Verify session exists
-    session = db.query(Session).filter(Session.id == session_id).first()
-    if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Session {session_id} not found. Please upload data first."
-        )
+    # Verify session exists and belongs to user
+    session = verify_session_ownership(db, session_id, user_id)
     
     try:
         # Get transaction count for logging
@@ -554,7 +790,8 @@ async def analyze_session(
 )
 async def get_dashboard(
     session_id: str,
-    db: DBSession = Depends(get_db)
+    db: DBSession = Depends(get_db),
+    user_id: str = Depends(get_current_user)
 ) -> DashboardResponse:
     """
     Get consolidated dashboard data for a session.
@@ -569,6 +806,7 @@ async def get_dashboard(
     Args:
         session_id: The session ID from the upload endpoint.
         db: Database session from dependency injection.
+        user_id: Authenticated user ID from Clerk.
     
     Returns:
         DashboardResponse: Complete dashboard data.
@@ -579,13 +817,8 @@ async def get_dashboard(
     Example:
         GET /dashboard/abc-123-def
     """
-    # Verify session exists
-    session = db.query(Session).filter(Session.id == session_id).first()
-    if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Session {session_id} not found."
-        )
+    # Verify session exists and belongs to user
+    session = verify_session_ownership(db, session_id, user_id)
     
     # Build category lookup
     categories = {c.id: c for c in db.query(Category).all()}
@@ -892,13 +1125,8 @@ async def get_goal_recommendations(
         POST /goal/abc-123-def
         Body: {"target_amount": 500}
     """
-    # Verify session exists
-    session = db.query(Session).filter(Session.id == session_id).first()
-    if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Session {session_id} not found."
-        )
+    # Verify session exists and belongs to user
+    session = verify_session_ownership(db, session_id, user_id)
     
     # Build category lookup
     categories = {c.id: c for c in db.query(Category).all()}
@@ -1032,7 +1260,8 @@ async def get_transactions(
     session_id: str,
     limit: int = 100,
     offset: int = 0,
-    db: DBSession = Depends(get_db)
+    db: DBSession = Depends(get_db),
+    user_id: str = Depends(get_current_user)
 ) -> list[TransactionOut]:
     """
     Get paginated list of transactions for a session.
@@ -1046,13 +1275,8 @@ async def get_transactions(
     Returns:
         List of TransactionOut objects.
     """
-    # Verify session exists
-    session = db.query(Session).filter(Session.id == session_id).first()
-    if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Session {session_id} not found."
-        )
+    # Verify session exists and belongs to user
+    session = verify_session_ownership(db, session_id, user_id)
     
     transactions = (
         db.query(Transaction)
@@ -1131,7 +1355,8 @@ async def get_categories(
 async def chat(
     session_id: str,
     request: ChatRequest,
-    db: DBSession = Depends(get_db)
+    db: DBSession = Depends(get_db),
+    user_id: str = Depends(get_current_user)
 ):
     """
     Chat with the AI financial coach.
@@ -1169,13 +1394,8 @@ async def chat(
     # Log chat request
     log_chat_request(session_id, len(request.message))
     
-    # Verify session exists
-    session = db.query(Session).filter(Session.id == session_id).first()
-    if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Session {session_id} not found."
-        )
+    # Verify session exists and belongs to user
+    session = verify_session_ownership(db, session_id, user_id)
     
     chat_service = ChatService(db)
     
@@ -1204,7 +1424,8 @@ async def chat(
 async def chat_sync(
     session_id: str,
     request: ChatRequest,
-    db: DBSession = Depends(get_db)
+    db: DBSession = Depends(get_db),
+    user_id: str = Depends(get_current_user)
 ) -> ChatResponse:
     """
     Chat with the AI financial coach (non-streaming version).
@@ -1238,13 +1459,8 @@ async def chat_sync(
             }
         )
     
-    # Verify session exists
-    session = db.query(Session).filter(Session.id == session_id).first()
-    if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Session {session_id} not found."
-        )
+    # Verify session exists and belongs to user
+    session = verify_session_ownership(db, session_id, user_id)
     
     chat_service = ChatService(db)
     
@@ -1286,7 +1502,8 @@ async def chat_sync(
 )
 async def get_suggested_prompts(
     session_id: str,
-    db: DBSession = Depends(get_db)
+    db: DBSession = Depends(get_db),
+    user_id: str = Depends(get_current_user)
 ) -> SuggestedPromptsResponse:
     """
     Get suggested prompts for the chat interface.
@@ -1301,13 +1518,8 @@ async def get_suggested_prompts(
     Returns:
         SuggestedPromptsResponse with list of prompts.
     """
-    # Verify session exists
-    session = db.query(Session).filter(Session.id == session_id).first()
-    if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Session {session_id} not found."
-        )
+    # Verify session exists and belongs to user
+    session = verify_session_ownership(db, session_id, user_id)
     
     chat_service = ChatService(db)
     prompts = chat_service.get_suggested_prompts(session_id)
