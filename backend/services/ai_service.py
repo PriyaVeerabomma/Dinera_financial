@@ -33,7 +33,7 @@ def retry_with_backoff(
 ):
     """
     Decorator for async functions that implements retry with exponential backoff.
-    
+
     Args:
         max_retries: Maximum number of retry attempts.
         initial_delay: Initial delay in seconds before first retry.
@@ -43,34 +43,36 @@ def retry_with_backoff(
     """
     if retryable_errors is None:
         retryable_errors = (Exception,)
-    
+
     def decorator(func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
             last_exception = None
             delay = initial_delay
-            
+
             for attempt in range(max_retries + 1):
                 try:
                     return await func(*args, **kwargs)
                 except retryable_errors as e:
                     last_exception = e
                     error_str = str(e).lower()
-                    
+
                     # Check for rate limit errors (429)
                     if "rate_limit" in error_str or "429" in error_str:
                         # Use longer delay for rate limits
                         delay = min(delay * 2, max_delay)
-                        print(f"⏳ Rate limited, waiting {delay:.1f}s (attempt {attempt + 1}/{max_retries + 1})")
+                        print(
+                            f"⏳ Rate limited, waiting {delay:.1f}s (attempt {attempt + 1}/{max_retries + 1})")
                     elif attempt < max_retries:
-                        print(f"⚠️ API error, retrying in {delay:.1f}s (attempt {attempt + 1}/{max_retries + 1}): {e}")
-                    
+                        print(
+                            f"⚠️ API error, retrying in {delay:.1f}s (attempt {attempt + 1}/{max_retries + 1}): {e}")
+
                     if attempt < max_retries:
                         await asyncio.sleep(delay)
                         delay = min(delay * exponential_base, max_delay)
                     else:
                         raise last_exception
-            
+
             raise last_exception
         return wrapper
     return decorator
@@ -79,7 +81,7 @@ def retry_with_backoff(
 class AIService:
     """
     Wrapper for OpenAI API with retry logic and rate limit handling.
-    
+
     Features:
         - Automatic retry with exponential backoff
         - Rate limit (429) handling
@@ -97,11 +99,11 @@ class AIService:
         self.api_key = raw_key.strip() if raw_key else None
         self.model = os.getenv("OPENAI_MODEL", "gpt-4o")
         self.client = None
-        
+
         # Token usage tracking
         self.total_tokens_used = 0
         self.request_count = 0
-        
+
         # Only initialize client if API key is available and valid
         if self.api_key and self.api_key.startswith("sk-"):
             try:
@@ -113,20 +115,20 @@ class AIService:
                 self.client = None
         else:
             print("⚠️ OpenAI API key not configured. AI features will use fallback mode.")
-    
+
     def _track_usage(self, response) -> None:
         """Track token usage from API response."""
         if hasattr(response, 'usage') and response.usage:
             self.total_tokens_used += response.usage.total_tokens
             self.request_count += 1
-    
+
     def get_usage_stats(self) -> dict:
         """Get current usage statistics."""
         return {
             "total_tokens": self.total_tokens_used,
             "request_count": self.request_count,
             "avg_tokens_per_request": (
-                self.total_tokens_used / self.request_count 
+                self.total_tokens_used / self.request_count
                 if self.request_count > 0 else 0
             )
         }
@@ -136,7 +138,7 @@ class AIService:
     ) -> list[dict]:
         """
         Categorize aggregated transaction patterns using function calling.
-        
+
         Privacy-safe: Receives aggregated patterns (merchant_id, counts, hints)
         instead of raw transaction descriptions.
         """
@@ -144,7 +146,7 @@ class AIService:
         if not self.client:
             print("⚠️ AI categorization skipped - no API key")
             return []
-        
+
         # Format aggregated patterns for AI (no raw merchant names)
         pattern_text = "\n".join(
             f"Pattern {p['merchant_id']}: {p['transaction_count']} transactions, "
@@ -198,7 +200,8 @@ class AIService:
                         },
                     }
                 ],
-                tool_choice={"type": "function", "function": {"name": "categorize_patterns"}},
+                tool_choice={"type": "function", "function": {
+                    "name": "categorize_patterns"}},
                 timeout=30,
             )
 
@@ -209,11 +212,11 @@ class AIService:
         except Exception as e:
             print(f"AI categorization error after retries: {e}")
             return []
-    
+
     async def _call_with_retry(self, **kwargs) -> any:
         """
         Make OpenAI API call with retry logic for rate limits.
-        
+
         Implements exponential backoff for:
         - 429 Rate Limit errors
         - 500/502/503 Server errors
@@ -221,7 +224,7 @@ class AIService:
         """
         last_exception = None
         delay = self.INITIAL_DELAY
-        
+
         for attempt in range(self.MAX_RETRIES + 1):
             try:
                 response = await self.client.chat.completions.create(
@@ -230,27 +233,29 @@ class AIService:
                 )
                 self._track_usage(response)
                 return response
-                
+
             except Exception as e:
                 last_exception = e
                 error_str = str(e).lower()
-                
+
                 # Check if retryable error
                 is_rate_limit = "rate_limit" in error_str or "429" in error_str
-                is_server_error = any(code in error_str for code in ["500", "502", "503"])
+                is_server_error = any(code in error_str for code in [
+                                      "500", "502", "503"])
                 is_timeout = "timeout" in error_str
-                
+
                 if is_rate_limit or is_server_error or is_timeout:
                     if attempt < self.MAX_RETRIES:
                         wait_time = delay * (2 if is_rate_limit else 1)
-                        print(f"⏳ API error, retrying in {wait_time:.1f}s (attempt {attempt + 1}/{self.MAX_RETRIES + 1})")
+                        print(
+                            f"⏳ API error, retrying in {wait_time:.1f}s (attempt {attempt + 1}/{self.MAX_RETRIES + 1})")
                         await asyncio.sleep(wait_time)
                         delay = min(delay * 2, self.MAX_DELAY)
                         continue
-                
+
                 # Non-retryable error or max retries reached
                 raise last_exception
-        
+
         raise last_exception
 
     async def generate_insights(self, context: dict) -> list[dict]:
@@ -259,7 +264,7 @@ class AIService:
         if not self.client:
             print("⚠️ AI insights skipped - using fallback insights")
             return self._fallback_insights(context)
-            
+
         system_prompt = """You are a friendly, knowledgeable financial coach. Your job is to
 analyze spending data and provide actionable insights that help users improve their
 financial health.
@@ -355,7 +360,8 @@ Generate 4-6 insights covering:
                         },
                     }
                 ],
-                tool_choice={"type": "function", "function": {"name": "generate_insights"}},
+                tool_choice={"type": "function", "function": {
+                    "name": "generate_insights"}},
                 timeout=30,
             )
 
@@ -374,7 +380,7 @@ Generate 4-6 insights covering:
         # If no client available, return fallback advice
         if not self.client:
             return "Focus on reducing non-essential spending first. Small changes add up over time!"
-            
+
         try:
             response = await self.client.chat.completions.create(
                 model=self.model,
@@ -408,8 +414,9 @@ Give 2-3 sentences of encouraging, practical advice.""",
         if summary.get("by_category"):
             categories = summary["by_category"]
             # Filter to spending categories only (negative amounts)
-            spending_cats = {k: v for k, v in categories.items() if v.get("amount", 0) < 0}
-            
+            spending_cats = {k: v for k,
+                             v in categories.items() if v.get("amount", 0) < 0}
+
             if spending_cats:
                 largest = max(
                     spending_cats.items(), key=lambda x: abs(x[1].get("amount", 0))
@@ -446,7 +453,8 @@ Give 2-3 sentences of encouraging, practical advice.""",
         # Anomalies insight
         anomalies = context.get("anomalies", [])
         if anomalies:
-            high_anomalies = [a for a in anomalies if a.get("severity") == "high"]
+            high_anomalies = [
+                a for a in anomalies if a.get("severity") == "high"]
             if high_anomalies:
                 insights.append(
                     {
@@ -465,9 +473,10 @@ Give 2-3 sentences of encouraging, practical advice.""",
         total_income = summary.get("total_income", 0)
         total_spending = summary.get("total_spending", 0)
         net = summary.get("net", total_income + total_spending)
-        
+
         if net > 0:
-            savings_rate = (net / total_income * 100) if total_income > 0 else 0
+            savings_rate = (net / total_income *
+                            100) if total_income > 0 else 0
             insights.append(
                 {
                     "type": "positive",
