@@ -70,7 +70,9 @@ Traditional budgeting apps lack intelligence and personalization. Dinera goes be
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ High Level Architecture
+<img width="2019" height="1930" alt="high-level-architecture" src="https://github.com/user-attachments/assets/a1b83f3c-9e9e-4e71-8398-58f0f3103136" />
+
 
 Dinera uses a **microservice architecture** with distinct layers for frontend, API gateway, application logic, data storage, and AI/ML services.
 
