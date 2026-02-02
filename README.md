@@ -1,75 +1,221 @@
-# Smart Financial Coach
+# Dinera Financial Coach [Palo Alto Networks Hackathon]
 
-An AI-powered financial analysis application that helps users understand their spending patterns, detect anomalies, identify recurring charges, and receive personalized insights.
+> **AI-powered personal financial analysis platform with intelligent spending insights, ML anomaly detection, and conversational coaching**
 
-![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green.svg)
-![React](https://img.shields.io/badge/React-18+-blue.svg)
-![TypeScript](https://img.shields.io/badge/TypeScript-5+-blue.svg)
-![License](https://img.shields.io/badge/License-MIT-yellow.svg)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.109-009688?style=flat-square&logo=fastapi)](https://fastapi.tiangolo.com)
+[![React](https://img.shields.io/badge/React-18.2-61dafb?style=flat-square&logo=react)](https://react.dev)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.3-3178c6?style=flat-square&logo=typescript)](https://www.typescriptlang.org)
+[![Python](https://img.shields.io/badge/Python-3.10+-3776ab?style=flat-square&logo=python)](https://www.python.org)
+[![OpenAI](https://img.shields.io/badge/OpenAI-GPT--4o-10a37f?style=flat-square&logo=openai)](https://openai.com)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 
-## Features
+---
+## Project URLs
+- Code Labs: [Codelabs Documentation](https://codelabs-preview.appspot.com/?file_id=13j_q1EJuL1LQwyuesChPkiwQ2vXxyV9XLnI1e7lg__A/edit?tab=t.5cpih9qtxm58#0)
+- Swagger: [Swagger](http://35.235.97.147:8000/docs)
+- Live Demo : [Dinera](http://35.235.97.147:5173/)
+- Walkthrough Video : [Application Walkthrough](https://www.youtube.com/@PriyaVeerabomma)
+- Github Tasks: [GitHub Issues and Tasks](https://github.com/PriyaVeerabomma/Dinera_financial/issues)
+---
 
-- **CSV Upload & Processing** - Upload bank transaction CSV files for analysis
-- **AI-Powered Categorization** - Automatic transaction categorization using OpenAI GPT-4
-- **Anomaly Detection** - Statistical detection of unusual spending patterns
-- **Recurring Charge Detection** - Identify subscriptions and "gray charges" (forgotten small subscriptions)
-- **Personalized Insights** - AI-generated actionable financial recommendations
-- **Interactive Chat (Dinera)** - Conversational AI assistant for financial questions
-- **Goal-Based Savings** - Get recommendations to achieve savings targets
-- **Clerk Authentication** - Secure user authentication with session isolation
+## Overview
 
-## Tech Stack
+**Dinera Financial Coach** is an intelligent financial analysis platform that combines machine learning, natural language processing, and conversational AI to help users:
+
+- **Automatically categorize** financial transactions using hybrid AI + rule-based systems
+- **Detect unusual spending** with Isolation Forest machine learning algorithm
+- **Identify subscriptions** and forgotten recurring charges (gray charges)
+- **Chat with an AI coach** that has real-time access to your financial data
+- **Receive personalized insights** and actionable savings recommendations
+- **Set and achieve** savings goals with AI-powered forecasting
+
+### Why Dinera?
+
+Traditional budgeting apps lack intelligence and personalization. Dinera goes beyond simple expense tracking by:
+
+- Training ML models **on your individual data** for personalized anomaly detection  
+- Using **GPT-4o with function calling** for natural language financial queries  
+- Providing **explainable AI** - every insight includes reasoning and confidence scores  
+- Offering **hybrid categorization** - 70% rule-based speed + 30% AI accuracy  
+- Detecting **gray charges** - small forgotten subscriptions costing $100s annually  
+
+---
+
+##  Features
+
+###  Smart Categorization
+- **Hybrid Approach**: Rule-based patterns (~70% coverage) + GPT-4o for complex transactions
+- **12 Default Categories**: Housing, Groceries, Dining, Transportation, Healthcare, Shopping, Entertainment, Subscriptions, Utilities, Travel, Income, Other
+
+###  Anomaly Detection
+- **ML-Powered**: Isolation Forest algorithm trained on YOUR data (personalized)
+
+###  Recurring Charge Detection
+- **Subscription Tracking**: Automatically identifies monthly and weekly patterns
+- **Gray Charge Alerts**: Flags small, unknown recurring charges you might have forgotten
+
+### AI-Powered Insights
+- **Personalized Advice**: GPT-4o generates actionable recommendations
+- **Pattern Recognition**: Detects merchant habits, weekend splurges, payday impulse spending
+
+###  Conversational AI Coach
+- **Natural Language Queries**: Ask questions like "What are my biggest expenses?"
+- **Function Calling**: 7 tools for real-time data access (spending summary, anomalies, recurring charges, insights, category details, transaction search, month comparison)
+- **Streaming Responses**: Real-time token-by-token generation
+
+---
+
+## 🏗️ Architecture
+
+Dinera uses a **microservice architecture** with distinct layers for frontend, API gateway, application logic, data storage, and AI/ML services.
+
+```mermaid
+flowchart TD
+    User[User] --> Clerk[Clerk Authentication]
+    Clerk --> Welcome[Welcome Page]
+    Welcome --> Upload[Upload CSV Option]
+    
+    Upload --> CSV[CSV Processor Service]
+    CSV --> DB[(SQLite Database<br/>Stores CSV Data)]
+    
+    DB --> Dashboard[Main Dashboard]
+    
+    Dashboard --> Cat[Categorizer]
+    Dashboard --> Anom[Anomaly Detector]
+    Dashboard --> Rec[Recurring Detector]
+    Dashboard --> Insight[Insight Generator]
+    Dashboard --> Chat[Chat Service]
+    
+    Cat --> DB
+    Anom --> DB
+    Rec --> DB
+    Insight --> DB
+    Chat --> DB
+    
+    Cat --> OpenAI[OpenAI GPT-4o]
+    Insight --> OpenAI
+    Chat --> OpenAI
+    
+    Anom --> ML[ML Model Training<br/>Isolation Forest]
+    
+    style Clerk fill:#6c47ff
+    style Welcome fill:#e1f5ff
+    style Upload fill:#fff4e6
+    style CSV fill:#ffecb3
+    style DB fill:#f3e5f5
+    style Dashboard fill:#c8e6c9
+    style ML fill:#ffccbc
+    style OpenAI fill:#b2dfdb
+```
+
+### Architecture Layers Explained
+
+#### 1. **Client Layer**
+- Users access via modern web browsers (Chrome, Firefox, Safari)
+- Responsive design works on desktop, tablet, mobile
+
+#### 2. **Presentation Layer (React Frontend)**
+- **Technology**: React 18.2 + TypeScript 5.3 + Tailwind CSS + Vite
+- **Components**: Upload, Dashboard, Chat, Insights, Anomalies, Recurring Charges, Goals
+- **State Management**: React hooks (useState, useEffect)
+- **Styling**: Utility-first Tailwind CSS with warm neutral palette
+
+#### 3. **API Gateway Layer**
+- **Nginx**: Reverse proxy for frontend serving and API routing
+- **Clerk Auth**: JWT token validation on protected routes
+- **Rate Limiter**: Sliding window algorithm (30 chat/min, 100 API/min)
+
+#### 4. **Application Layer (FastAPI Backend)**
+- **FastAPI**: High-performance async Python API framework
+- **7 Service Modules**: Modular, reusable components for each feature
+- **15+ API Endpoints**: RESTful design with automatic OpenAPI docs
+
+#### 5. **Data Layer (SQLite)**
+- **8 Tables**: Sessions, Transactions, Categories, Anomalies, Recurring Charges, Insights, Deltas, Conversations
+- **SQLAlchemy ORM**: Type-safe database operations
+- **Foreign Keys**: Maintains referential integrity
+
+#### 6. **AI/ML Layer**
+- **OpenAI GPT-4o**: Transaction categorization, insight generation, chat
+- **Isolation Forest**: ML anomaly detection (≥50 transactions)
+- **Statistical Analysis**: Z-score fallback (<50 transactions)
+
+#### 7. **Cloud Infrastructure**
+- **GCP Compute Engine**: e2-medium VM (2 vCPU, 4GB RAM)
+- **Ubuntu 22.04 LTS**: Stable Linux distribution
+- **Docker**: Containerized deployment
+
+---
+
+## 🛠️ Technology Stack
 
 ### Backend
-- **FastAPI** - Modern Python web framework
-- **SQLAlchemy** - SQL database ORM
-- **SQLite** - Lightweight database
-- **OpenAI GPT-4** - AI-powered insights and chat
-- **Pydantic** - Data validation
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| Python | 3.10+ | Core language |
+| FastAPI | 0.109 | REST API framework |
+| SQLAlchemy | 2.0 | Database ORM |
+| Pydantic | 2.5 | Data validation |
+| Pandas | 2.2 | CSV processing |
+| scikit-learn | 1.4+ | ML (Isolation Forest) |
+| OpenAI | 1.12+ | GPT-4o integration |
+| Uvicorn | 0.27 | ASGI server |
 
 ### Frontend
-- **React 18** - UI library
-- **TypeScript** - Type-safe JavaScript
-- **Vite** - Fast build tool
-- **Tailwind CSS** - Utility-first styling
-- **Clerk** - Authentication
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| React | 18.2 | UI framework |
+| TypeScript | 5.3 | Type safety |
+| Vite | 5.0 | Build tool |
+| Tailwind CSS | 3.4 | Styling |
+| Recharts | 2.12 | Charts/visualizations |
 
-## Prerequisites
+### Infrastructure
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| Docker | Latest | Containerization |
+| Docker Compose | Latest | Service orchestration |
+| Nginx | 1.18+ | Reverse proxy |
+| SQLite | 3 | Database |
+| GCP Compute Engine | - | Cloud hosting |
 
-Before you begin, ensure you have the following installed:
+### Authentication & Security
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| Clerk | Latest | User authentication |
+| PyJWT | 2.8+ | JWT token handling |
+| python-dotenv | 1.0 | Environment variables |
 
-- **Python 3.10+** - [Download Python](https://www.python.org/downloads/)
-- **Node.js 18+** - [Download Node.js](https://nodejs.org/)
-- **npm** or **yarn** - Comes with Node.js
+---
 
-You'll also need API keys for:
-- **OpenAI API** - [Get API Key](https://platform.openai.com/api-keys)
-- **Clerk** (optional, for authentication) - [Get Started](https://clerk.com/)
+## Quick Start
 
-## Installation
+### Prerequisites
 
-### 1. Clone the Repository
+- **Python**: 3.10 or higher
+- **Node.js**: 18 or higher
+- **npm**: 9 or higher
+- **OpenAI API Key**: Get one at [platform.openai.com](https://platform.openai.com)
+- **Clerk Account**: Sign up at [clerk.com](https://clerk.com)
+
+### 1. Clone Repository
 
 ```bash
-git clone https://github.com/yourusername/smart-financial-coach.git
-cd smart-financial-coach
+git clone https://github.com/your-username/dinera-financial.git
+cd dinera-financial
 ```
 
 ### 2. Backend Setup
 
 ```bash
-# Navigate to backend directory
+# Navigate to backend
 cd backend
 
-# Create a virtual environment (recommended)
+# Create virtual environment
 python3 -m venv venv
 
 # Activate virtual environment
-# On macOS/Linux:
-source venv/bin/activate
-# On Windows:
-.\venv\Scripts\activate
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
@@ -78,68 +224,45 @@ pip install -r requirements.txt
 ### 3. Frontend Setup
 
 ```bash
-# Navigate to frontend directory (from project root)
-cd frontend
+# Navigate to frontend
+cd ../frontend
 
 # Install dependencies
 npm install
 ```
 
-## Configuration
+### 4. Environment Configuration
 
-### Backend Environment Variables
-
-```bash
-# Copy the example file
-cd backend
-cp env.example .env
-
-# Edit with your values
-nano .env  # or use your preferred editor
-```
-
-Required variables:
-```env
-OPENAI_API_KEY=sk-your-openai-api-key-here
-```
-
-Optional (for Clerk authentication):
-```env
-CLERK_SECRET_KEY=sk_test_your-clerk-secret-key
-CLERK_FRONTEND_API=your-instance.clerk.accounts.dev
-```
-
-For development without authentication:
-```env
-AUTH_BYPASS=true
-```
-
-### Frontend Environment Variables
+Create `.env` file in project root:
 
 ```bash
-# Copy the example file
-cd frontend
-cp env.example .env
+# OpenAI Configuration
+OPENAI_API_KEY=sk-your-api-key-here
+OPENAI_MODEL=gpt-4o
+
+# Database
+DATABASE_URL=sqlite:///./financial_coach.db
+
+# API Configuration
+API_HOST=0.0.0.0
+API_PORT=8000
+DEBUG=true
+
+# CORS
+CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+
+# Clerk Authentication
+VITE_CLERK_PUBLISHABLE_KEY=pk_test_your-clerk-key
 ```
 
-Optional (for Clerk authentication):
-```env
-VITE_CLERK_PUBLISHABLE_KEY=pk_test_your-clerk-publishable-key
-```
-
-> **Note:** If you don't configure Clerk, the app will run in development mode with authentication bypassed.
-
-## Running the Application
-
-### Option 1: Run Both Services (Recommended)
-
-Open two terminal windows:
+### 5. Run the Application
 
 **Terminal 1 - Backend:**
 ```bash
 cd backend
-source venv/bin/activate  # If using virtual environment
-python3 -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload
+source venv/bin/activate
+python main.py
+# Or: uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 **Terminal 2 - Frontend:**
@@ -148,139 +271,242 @@ cd frontend
 npm run dev
 ```
 
-### Option 2: Quick Start Script
+### 6. Access the Application
 
-```bash
-# From project root, run both services
-# Terminal 1
-cd backend && python3 -m uvicorn main:app --reload &
-
-# Terminal 2
-cd frontend && npm run dev
-```
-
-### Access the Application
-
-- **Frontend:** http://localhost:5173
-- **Backend API:** http://localhost:8000
-- **API Docs:** http://localhost:8000/docs
-
-## Usage
-
-1. **Open the app** at http://localhost:5173
-2. **Sign in** (or use bypass mode in development)
-3. **Upload a CSV** file with your transactions, or click **"Use Sample Data"** to try with demo data
-4. **View Dashboard** with insights, anomalies, and recurring charges
-5. **Chat with Dinera** - Ask questions about your spending
-
-### CSV Format
-
-Your CSV file should have these columns (flexible naming):
-
-| Column | Description | Example |
-|--------|-------------|---------|
-| date | Transaction date | 2024-01-15 |
-| description | Merchant/description | AMAZON.COM |
-| amount | Transaction amount | -49.99 |
-
-Negative amounts = expenses, Positive amounts = income
-
-## API Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/health` | Health check |
-| POST | `/upload` | Upload CSV file |
-| POST | `/sample` | Load sample data |
-| POST | `/analyze/{session_id}` | Run analysis |
-| GET | `/dashboard/{session_id}` | Get dashboard data |
-| POST | `/chat/{session_id}/sync` | Chat with Dinera |
-| GET | `/sessions` | List user sessions |
-
-Full API documentation available at http://localhost:8000/docs
-
-## Project Structure
-
-```
-smart-financial-coach/
-├── backend/
-│   ├── main.py              # FastAPI application
-│   ├── models.py            # SQLAlchemy models
-│   ├── schemas.py           # Pydantic schemas
-│   ├── auth.py              # Clerk authentication
-│   ├── database.py          # Database setup
-│   ├── requirements.txt     # Python dependencies
-│   └── services/
-│       ├── ai_service.py    # OpenAI integration
-│       ├── chat_service.py  # Dinera chat service
-│       ├── categorizer.py   # Transaction categorization
-│       ├── anomaly_detector.py
-│       ├── recurring_detector.py
-│       └── insight_generator.py
-├── frontend/
-│   ├── src/
-│   │   ├── App.tsx          # Main application
-│   │   ├── components/      # React components
-│   │   ├── api/client.ts    # API client
-│   │   └── types.ts         # TypeScript types
-│   ├── package.json
-│   └── vite.config.ts
-└── README.md
-```
-
-## Troubleshooting
-
-### Backend won't start
-- Ensure Python 3.10+ is installed: `python3 --version`
-- Check if port 8000 is available: `lsof -i :8000`
-- Verify `.env` file exists with `OPENAI_API_KEY`
-
-### Frontend won't start
-- Ensure Node.js 18+ is installed: `node --version`
-- Check if port 5173 is available: `lsof -i :5173`
-- Run `npm install` to ensure dependencies are installed
-
-### API calls failing
-- Check backend is running at http://localhost:8000/health
-- Verify CORS settings if using different ports
-- Check browser console for error details
-
-### Authentication issues
-- For development, set `AUTH_BYPASS=true` in backend `.env`
-- For production, ensure all Clerk keys are configured
-
-## Development
-
-### Running Tests
-
-```bash
-cd backend
-pytest tests/ -v
-```
-
-### Code Style
-
-- Backend: Follow PEP 8, use type hints
-- Frontend: ESLint + Prettier configured
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/your-feature`
-3. Commit changes: `git commit -m 'Add your feature'`
-4. Push to branch: `git push origin feature/your-feature`
-5. Open a Pull Request
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- OpenAI for GPT-4 API
-- Clerk for authentication
-- FastAPI and React communities
+- **Frontend**: http://localhost:5173
+- **Backend API Docs**: http://localhost:8000/docs
+- **Health Check**: http://localhost:8000/health
 
 ---
 
-Built with ❤️ for smarter financial decisions
+## Installation
+
+### Development Installation
+
+```bash
+# Clone repository
+git clone https://github.com/your-username/dinera-financial.git
+cd dinera-financial
+
+# Setup backend
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# Setup frontend
+cd ../frontend
+npm install
+
+# Configure environment
+cp .env.example .env
+# Edit .env with your API keys
+
+# Run development servers
+# Terminal 1:
+cd backend && python main.py
+# Terminal 2:
+cd frontend && npm run dev
+```
+
+### Production Installation (Docker)
+
+```bash
+# Build containers
+docker-compose build
+
+# Start services
+docker-compose up -d
+
+# Check status
+docker-compose ps
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+```
+---
+
+## Deployment
+
+### Deploy to Google Cloud Platform
+
+#### 1. Create VM Instance
+
+```bash
+gcloud compute instances create dinera-financial \
+  --zone=us-central1-a \
+  --machine-type=e2-medium \
+  --image-family=ubuntu-2204-lts \
+  --image-project=ubuntu-os-cloud \
+  --boot-disk-size=30GB \
+  --tags=http-server,https-server
+```
+
+#### 2. SSH into VM
+
+```bash
+gcloud compute ssh dinera-financial --zone=us-central1-a
+```
+
+#### 3. Install Dependencies
+
+```bash
+# Update system
+sudo apt update && sudo apt upgrade -y
+
+# Install Python
+sudo apt install -y python3.10 python3.10-venv python3-pip
+
+# Install Node.js
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# Install Nginx
+sudo apt install -y nginx
+```
+
+#### 4. Deploy Application
+
+```bash
+# Clone repository
+cd /var/www
+sudo mkdir -p dinera-financial
+sudo chown $USER:$USER dinera-financial
+git clone https://github.com/your-username/dinera-financial.git dinera-financial
+cd dinera-financial
+
+# Setup backend
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# Setup frontend
+cd ../frontend
+npm install
+npm run build
+
+# Configure .env
+cd ..
+cp .env.example .env
+nano .env  # Add your API keys
+```
+
+#### 5. Configure systemd Service
+
+Create `/etc/systemd/system/dinera-backend.service`:
+
+```ini
+[Unit]
+Description=Dinera Financial Backend
+After=network.target
+
+[Service]
+Type=simple
+User=your-username
+WorkingDirectory=/var/www/dinera-financial/backend
+Environment="PATH=/var/www/dinera-financial/venv/bin"
+ExecStart=/var/www/dinera-financial/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable dinera-backend
+sudo systemctl start dinera-backend
+```
+
+#### 6. Configure Nginx
+
+Create `/etc/nginx/sites-available/dinera-financial`:
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+
+    location / {
+        root /var/www/dinera-financial/frontend/dist;
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /api/ {
+        proxy_pass http://localhost:8000/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+```bash
+sudo ln -s /etc/nginx/sites-available/dinera-financial /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl restart nginx
+```
+
+#### 7. Configure Firewall
+
+```bash
+gcloud compute firewall-rules create allow-http --allow tcp:80
+gcloud compute firewall-rules create allow-https --allow tcp:443
+gcloud compute firewall-rules create allow-backend --allow tcp:8000
+```
+
+#### 8. Test Deployment
+
+```bash
+curl http://VM_EXTERNAL_IP:8000/health
+```
+
+---
+
+### Development Workflow
+
+1. **Fork** the repository
+2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
+3. **Commit** your changes (`git commit -m 'Add amazing feature'`)
+4. **Push** to the branch (`git push origin feature/amazing-feature`)
+5. **Open** a Pull Request
+
+### Code Style
+
+**Python:**
+- Follow PEP 8 guidelines
+- Use type hints
+- Document functions with docstrings
+
+**TypeScript/React:**
+- Follow ESLint rules
+- Use functional components with hooks
+- Add JSDoc comments for complex functions
+- Run linter: `npm run lint`
+
+### Testing
+
+```bash
+# Backend tests
+cd backend
+pytest tests/ -v
+
+# Frontend tests
+cd frontend
+npm test
+```
+---
+
+## 📜 License
+
+MIT License – Feel free to fork, extend, and build upon TravelBuddy.
+
+---
+## 🤖 AI Usage Disclosure
+
+AI tools such as OpenAI GPT, LangChain, and GitHub Copilot were used for implementing multi-agent travel assistance, generating responses, and supporting development tasks like code scaffolding and prompt tuning.
+
+
