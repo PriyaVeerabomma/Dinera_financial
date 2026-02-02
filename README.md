@@ -62,6 +62,11 @@ Traditional budgeting apps lack intelligence and personalization. Dinera goes be
 - **Natural Language Queries**: Ask questions like "What are my biggest expenses?"
 - **Function Calling**: 7 tools for real-time data access (spending summary, anomalies, recurring charges, insights, category details, transaction search, month comparison)
 - **Streaming Responses**: Real-time token-by-token generation
+  
+### 🥠 Fortune Cookie Insights
+- **Fun Financial Wisdom**: Get personalized fortune cookie messages based on your spending patterns
+- **AI-Generated**: Uses GPT-4o to create witty, motivational financial advice
+- **Contextual**: Messages reflect your actual financial behavior and insights
 
 ---
 
@@ -499,6 +504,8 @@ cd frontend
 npm test
 ```
 ---
+
+###  Sample Data & Test Cases Pre-loaded test datasets in the `/test_csvs` folder. Feel free to quick start analyzing without connecting your bank accounts :p
 
 ## 📜 License
 
